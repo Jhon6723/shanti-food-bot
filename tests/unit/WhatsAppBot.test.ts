@@ -196,6 +196,16 @@ describe('WhatsAppBot — order flow (sad paths)', () => {
     bot = new WhatsAppBot(makeRepo());
   });
 
+  it('does not crash when ordering a product without customization options (regression)', async () => {
+    await bot.handleMessage(PHONE, msg('hola'));
+    await bot.handleMessage(PHONE, msg('2'));
+    await bot.handleMessage(PHONE, msg('Carlos'));
+    await bot.handleMessage(PHONE, msg('7')); // Coca-Cola 400ml — no customizations
+    const res = await bot.handleMessage(PHONE, msg('1')); // quantity
+    expect(res).toContain('Agregado');
+    expect(res).toContain('Coca-Cola');
+  });
+
   it('rejects name shorter than 2 chars', async () => {
     await bot.handleMessage(PHONE, msg('hola'));
     await bot.handleMessage(PHONE, msg('2'));

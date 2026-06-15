@@ -261,6 +261,13 @@ Responde con el número de la opción.`;
       product.customizationOptions.forEach((opt, i) => { msg += `${i + 1}. ${opt}\n`; });
       msg += `${product.customizationOptions.length + 1}. Ninguna\n\nResponde con números separados por coma (ej: *1,3*) o escribe tu preferencia.`;
     } else {
+      session.pendingItem = {
+        productId: product.id,
+        quantity: 0,
+        customizations: [],
+        unitPrice: product.price,
+        preparationMinutes: product.preparationMinutes,
+      };
       session.step = 'quantity';
       msg += `¿Cuántas porciones deseas?\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
