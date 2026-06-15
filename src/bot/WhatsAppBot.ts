@@ -71,6 +71,11 @@ const sessions = new Map<string, Session>();
 
 export class WhatsAppBot {
   private readonly deliveryFee = 3000;
+  private readonly repo: typeof orderRepository;
+
+  constructor(repo?: typeof orderRepository) {
+    this.repo = repo ?? orderRepository;
+  }
 
   async handleMessage(
     rawFrom: string,
@@ -83,7 +88,7 @@ export class WhatsAppBot {
 
     if (text === 'hola' || text === 'inicio' || text === 'empezar') {
       session.reset();
-      const savedName = await orderRepository.getCustomerNameByPhone(from);
+      const savedName = await this.repo.getCustomerNameByPhone(from);
       if (savedName) {
         session.customerName = savedName;
         return `¡Hola de nuevo, *${savedName}*! 🍚\n\n¿Qué deseas ordenar hoy?\n\n1️⃣ Ver menú completo\n2️⃣ Hacer pedido rápido\n3️⃣ Estado de mi pedido\n4️⃣ Hablar con alguien\n\nResponde con el número de la opción.`;
@@ -257,7 +262,7 @@ Responde con el número de la opción.`;
       msg += `${product.customizationOptions.length + 1}. Ninguna\n\nResponde con números separados por coma (ej: *1,3*) o escribe tu preferencia.`;
     } else {
       session.step = 'quantity';
-      msg += `¿Cuántas porciones deseas?`;
+      msg += `¿Cuántas porciones deseas?\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
     return msg;
   }
@@ -265,7 +270,7 @@ Responde con el número de la opción.`;
   private handleCustomization(text: string, session: Session): string {
     if (text === '0' || text === 'atras' || text === 'volver') {
       session.step = 'product';
-      return `${this.showProductList()}\n\nResponde con el número del producto.`;
+      return `${this.showProductList()}\n\nResponde con el número del producto.\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
 
     const options = session.currentProduct!.customizationOptions;
@@ -303,7 +308,7 @@ Responde con el número de la opción.`;
       preparationMinutes: session.currentProduct!.preparationMinutes,
     };
     session.step = 'quantity';
-    return `¿Cuántas porciones de *${session.currentProduct!.name}* deseas?`;
+    return `¿Cuántas porciones de *${session.currentProduct!.name}* deseas?\n\n_(Escribe *0* o *volver* para regresar)_`;
   }
 
   private handleQuantity(text: string, session: Session): string {
@@ -338,27 +343,27 @@ Responde con el número de la opción.`;
     if (text === '0' || text === 'atras' || text === 'volver') {
       if (session.items.length === 0) {
         session.step = 'product';
-        return `${this.showProductList()}\n\nTu carrito está vacío. Responde con el número del producto.`;
+        return `${this.showProductList()}\n\nTu carrito está vacío. Responde con el número del producto.\n\n_(Escribe *0* o *volver* para regresar)_`;
       }
       const removed = session.items.pop()!;
       session.subtotal -= removed.unitPrice! * removed.quantity;
       session.currentProduct = getProductById(removed.productId) ?? null;
       session.pendingItem = { ...removed, quantity: 0 };
       session.step = 'quantity';
-      return `Producto eliminado del carrito.\n\n¿Cuántas porciones de *${session.currentProduct?.name ?? 'este producto'}* deseas?`;
+      return `Producto eliminado del carrito.\n\n¿Cuántas porciones de *${session.currentProduct?.name ?? 'este producto'}* deseas?\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
 
     if (text === '1' || text === 'si' || text === 'sí' || text === 'menu') {
       session.currentProduct = null;
       session.pendingItem = null;
       session.step = 'product';
-      return `${this.showProductList()}\n\nResponde con el número del producto.`;
+      return `${this.showProductList()}\n\nResponde con el número del producto.\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
     if (text === '2' || text === 'no' || text === 'finalizar') {
       session.step = 'delivery_type';
-      return `Perfecto. *Total de productos: $${session.subtotal.toLocaleString()}*\n\n¿Cómo deseas recibir tu pedido?\n\n1️⃣ 🛵 Domicilio (+$3.000)\n2️⃣ 🏪 Recoger en restaurante`;
+      return `Perfecto. *Total de productos: $${session.subtotal.toLocaleString()}*\n\n¿Cómo deseas recibir tu pedido?\n\n1️⃣ 🛵 Domicilio (+$3.000)\n2️⃣ 🏪 Recoger en restaurante\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
-    return `Opción no reconocida.\n\n*Total hasta ahora: $${session.subtotal.toLocaleString()}*\n\n¿Deseas agregar algo más?\n\n1️⃣ Sí, ver menú\n2️⃣ No, finalizar pedido`;
+    return `Opción no reconocida.\n\n*Total hasta ahora: $${session.subtotal.toLocaleString()}*\n\n¿Deseas agregar algo más?\n\n1️⃣ Sí, ver menú\n2️⃣ No, finalizar pedido\n\n_(Escribe *0* o *volver* para regresar)_`;
   }
 
   private handleDeliveryType(text: string, session: Session): string {
@@ -371,26 +376,30 @@ Responde con el número de la opción.`;
       session.type = 'delivery';
       session.total = session.subtotal + this.deliveryFee;
       session.step = 'address';
-      return `🛵 *Domicilio seleccionado*\n\nPor favor comparte tu ubicación o escribe la dirección completa de entrega:\n\nEjemplo: "Carrera 45 #12-34, Barrio San Fernando"`;
+      return `🛵 *Domicilio seleccionado*\n\nPor favor comparte tu ubicación o escribe la dirección completa de entrega:\n\nEjemplo: "Carrera 45 #12-34, Barrio San Fernando"\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
     if (text === '2' || text.includes('recoger') || text.includes('pickup') || text.includes('restaurante')) {
       session.type = 'pickup';
       session.total = session.subtotal;
       session.step = 'payment';
-      return `🏪 *Recogida en restaurante*\n\nDirección: Calle Principal #10-20, Barrio Shanti\n\n¿Método de pago?\n\n1️⃣ 💵 Efectivo (al recoger)\n2️⃣ 📱 Nequi (transferencia)`;
+      return `🏪 *Recogida en restaurante*\n\nDirección: Calle Principal #10-20, Barrio Shanti\n\n¿Método de pago?\n\n1️⃣ 💵 Efectivo (al recoger)\n2️⃣ 📱 Nequi (transferencia)\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
-    return `Opción no reconocida.\n\n¿Cómo deseas recibir tu pedido?\n\n1️⃣ 🛵 Domicilio (+$3.000)\n2️⃣ 🏪 Recoger en restaurante`;
+    return `Opción no reconocida.\n\n¿Cómo deseas recibir tu pedido?\n\n1️⃣ 🛵 Domicilio (+$3.000)\n2️⃣ 🏪 Recoger en restaurante\n\n_(Escribe *0* o *volver* para regresar)_`;
   }
 
   private handleAddress(text: string, session: Session): string {
     if (text === '0' || text === 'atras' || text === 'volver') {
       session.step = 'delivery_type';
-      return `¿Cómo deseas recibir tu pedido?\n\n1️⃣ 🛵 Domicilio (+$3.000)\n2️⃣ 🏪 Recoger en restaurante`;
+      return `¿Cómo deseas recibir tu pedido?\n\n1️⃣ 🛵 Domicilio (+$3.000)\n2️⃣ 🏪 Recoger en restaurante\n\n_(Escribe *0* o *volver* para regresar)_`;
+    }
+
+    if (text.trim().length < 5) {
+      return `📍 Por favor escribe una dirección válida.\n\nEjemplo: "Carrera 45 #12-34, Barrio San Fernando"`;
     }
 
     session.address = text;
     session.step = 'payment';
-    return `📍 Dirección: ${text}\n\n¿Método de pago?\n\n1️⃣ 💵 Efectivo (contra entrega)\n2️⃣ 📱 Nequi (transferencia)`;
+    return `📍 Dirección: ${text}\n\n¿Método de pago?\n\n1️⃣ 💵 Efectivo (contra entrega)\n2️⃣ 📱 Nequi (transferencia)\n\n_(Escribe *0* o *volver* para regresar)_`;
   }
 
   private handlePayment(text: string, session: Session): string {
@@ -414,7 +423,7 @@ Responde con el número de la opción.`;
       session.step = 'confirm';
       return this.showOrderSummary(session);
     }
-    return `Opción no reconocida.\n\n¿Método de pago?\n\n1️⃣ 💵 Efectivo\n2️⃣ 📱 Nequi (transferencia)`;
+    return `Opción no reconocida.\n\n¿Método de pago?\n\n1️⃣ 💵 Efectivo\n2️⃣ 📱 Nequi (transferencia)\n\n_(Escribe *0* o *volver* para regresar)_`;
   }
 
   private showOrderSummary(session: Session): string {
@@ -487,7 +496,7 @@ Responde con el número de la opción.`;
       const order = new Order(orderData);
       const shouldAutoConfirm = order.total < 50000 && session.items.length <= 3;
       if (shouldAutoConfirm) order.confirm();
-      await orderRepository.save(order);
+      await this.repo.save(order);
       session.reset();
 
       let msg = `✅ *¡PEDIDO CONFIRMADO!* ✅\n\nNúmero de orden: *#${order.id}*\n\n`;
@@ -495,7 +504,7 @@ Responde con el número de la opción.`;
       if (order.paymentMethod === 'nequi') {
         msg += `💳 *Pago por Nequi:*\nNúmero: 312XXXXXXX\nTotal a transferir: $${order.total.toLocaleString()}\n\nPor favor envía el comprobante por aquí.\n\n`;
       }
-      msg += `Gracias por preferir Arrocería Shanti 🍚\n\nEscribe "estado" para consultar tu pedido.`;
+      msg += `Gracias por preferir Arrocería Shanti 🍚\n\nEscribe *"estado"* para consultar tu pedido.`;
       return msg;
     } catch (error) {
       return `❌ Error al procesar el pedido: ${(error as Error).message}\n\nEscribe "hola" para comenzar.`;
@@ -503,7 +512,7 @@ Responde con el número de la opción.`;
   }
 
   private async checkOrderStatus(phone: string): Promise<string> {
-    const pendingOrder = await orderRepository.findPendingByCustomer(phone);
+    const pendingOrder = await this.repo.findPendingByCustomer(phone);
     if (!pendingOrder) {
       return `No tienes pedidos activos en este momento.\n\nEscribe "hola" para hacer un nuevo pedido. 🍚`;
     }
@@ -523,13 +532,25 @@ Responde con el número de la opción.`;
       delivered: 'Entregado',
     };
 
-    let msg = `📦 *Pedido #${pendingOrder.id}*\n\n`;
+    const headerEmoji = pendingOrder.type === 'delivery' ? '🛵' : '📦';
+    let msg = `${headerEmoji} *Pedido #${pendingOrder.id}*\n\n`;
     msg += `Estado: ${statusEmojis[pendingOrder.status]} ${statusLabels[pendingOrder.status]}\n`;
     if (pendingOrder.status === 'preparing') {
       const remaining = new Date(pendingOrder.estimatedReadyAt).getTime() - Date.now();
       const minutes = Math.ceil(remaining / 60000);
       if (minutes > 0) msg += `Tiempo restante: ~${minutes} minutos\n`;
     }
+
+    msg += `\n*Productos:*\n`;
+    for (const item of pendingOrder.items) {
+      const product = getProductById(item.productId);
+      const name = product?.name ?? item.productId;
+      msg += `• ${item.quantity}x ${name} — $${(item.unitPrice * item.quantity).toLocaleString()}\n`;
+      if (item.customizations.length > 0) {
+        msg += `  _(${item.customizations.join(', ')})_\n`;
+      }
+    }
+
     msg += `\nTotal: $${pendingOrder.total.toLocaleString()}\nTipo: ${pendingOrder.type === 'delivery' ? 'Domicilio' : 'Recoger en local'}\n\nTe notificaremos cuando haya actualizaciones. 📲`;
     return msg;
   }
