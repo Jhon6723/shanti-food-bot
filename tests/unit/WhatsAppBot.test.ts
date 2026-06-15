@@ -296,6 +296,22 @@ describe('WhatsAppBot — navigation (0/volver/atrás)', () => {
     expect(res).toContain('personalización');
   });
 
+  it('0 in quantity step shows current cart items', async () => {
+    await bot.handleMessage(PHONE, msg('hola'));
+    await bot.handleMessage(PHONE, msg('2'));
+    await bot.handleMessage(PHONE, msg('Carlos'));
+    // add first item
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('4')); // Ninguna
+    await bot.handleMessage(PHONE, msg('2')); // 2 porciones → add_more
+    // start second item
+    await bot.handleMessage(PHONE, msg('1')); // ver menú
+    await bot.handleMessage(PHONE, msg('2')); // Arroz de Cerdo
+    await bot.handleMessage(PHONE, msg('4')); // Ninguna → quantity
+    const res = await bot.handleMessage(PHONE, msg('0')); // back
+    expect(res).toContain('Arroz Chino de Pollo'); // first item visible in cart
+  });
+
   it('0 in add_more removes last item', async () => {
     await bot.handleMessage(PHONE, msg('hola'));
     await bot.handleMessage(PHONE, msg('2'));
@@ -317,6 +333,42 @@ describe('WhatsAppBot — navigation (0/volver/atrás)', () => {
     await bot.handleMessage(PHONE, msg('2')); // finalizar → delivery_type
     const res = await bot.handleMessage(PHONE, msg('volver'));
     expect(res).toContain('agregar algo más');
+  });
+});
+
+describe('WhatsAppBot — quantity label by category', () => {
+  let bot: WhatsAppBot;
+
+  beforeEach(() => {
+    bot = new WhatsAppBot(makeRepo());
+  });
+
+  it('uses "porciones" for food products (arroz_chino)', async () => {
+    await bot.handleMessage(PHONE, msg('hola'));
+    await bot.handleMessage(PHONE, msg('2'));
+    await bot.handleMessage(PHONE, msg('Carlos'));
+    await bot.handleMessage(PHONE, msg('1')); // Arroz Chino de Pollo
+    const res = await bot.handleMessage(PHONE, msg('4')); // Ninguna → quantity prompt
+    expect(res).toContain('porciones');
+    expect(res).not.toContain('unidades');
+  });
+
+  it('uses "unidades" for drinks (bebidas)', async () => {
+    await bot.handleMessage(PHONE, msg('hola'));
+    await bot.handleMessage(PHONE, msg('2'));
+    await bot.handleMessage(PHONE, msg('Carlos'));
+    const res = await bot.handleMessage(PHONE, msg('7')); // Coca-Cola 400ml
+    expect(res).toContain('unidades');
+    expect(res).not.toContain('porciones');
+  });
+
+  it('uses "porciones" for bandeja_paisa', async () => {
+    await bot.handleMessage(PHONE, msg('hola'));
+    await bot.handleMessage(PHONE, msg('2'));
+    await bot.handleMessage(PHONE, msg('Carlos'));
+    await bot.handleMessage(PHONE, msg('5')); // Bandeja Paisa (2 opts → Ninguna = 3)
+    const res = await bot.handleMessage(PHONE, msg('3')); // Ninguna → quantity prompt
+    expect(res).toContain('porciones');
   });
 });
 

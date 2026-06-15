@@ -269,7 +269,7 @@ Responde con el número de la opción.`;
         preparationMinutes: product.preparationMinutes,
       };
       session.step = 'quantity';
-      msg += `¿Cuántas porciones deseas?\n\n_(Escribe *0* o *volver* para regresar)_`;
+      msg += `¿Cuántas ${this.quantityLabel(session)} deseas?\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
     return msg;
   }
@@ -315,14 +315,27 @@ Responde con el número de la opción.`;
       preparationMinutes: session.currentProduct!.preparationMinutes,
     };
     session.step = 'quantity';
-    return `¿Cuántas porciones de *${session.currentProduct!.name}* deseas?\n\n_(Escribe *0* o *volver* para regresar)_`;
+    return `¿Cuántas ${this.quantityLabel(session)} de *${session.currentProduct!.name}* deseas?\n\n_(Escribe *0* o *volver* para regresar)_`;
+  }
+
+  private quantityLabel(session: Session): string {
+    return session.currentProduct?.category === 'bebidas' ? 'unidades' : 'porciones';
   }
 
   private handleQuantity(text: string, session: Session): string {
     if (text === '0' || text === 'atras' || text === 'volver') {
       session.step = 'customization';
       const opts = session.currentProduct!.customizationOptions;
-      let msg = `¿Alguna personalización? (puedes elegir varias)\n`;
+      let msg = '';
+      if (session.items.length > 0) {
+        msg += `🛒 *Carrito actual:*\n`;
+        for (const item of session.items) {
+          const p = getProductById(item.productId);
+          msg += `• ${item.quantity}x ${p?.name ?? item.productId} — $${((item.unitPrice ?? 0) * item.quantity).toLocaleString()}\n`;
+        }
+        msg += `\n`;
+      }
+      msg += `¿Alguna personalización? (puedes elegir varias)\n`;
       opts.forEach((opt, i) => { msg += `${i + 1}. ${opt}\n`; });
       msg += `${opts.length + 1}. Ninguna\n\nResponde con números separados por coma.`;
       return msg;
@@ -333,7 +346,7 @@ Responde con el número de la opción.`;
       return `Por favor ingresa un número válido mayor a 0.`;
     }
     if (quantity > 20) {
-      return `⚠️ La cantidad máxima por producto es 20.\n\n¿Cuántas porciones de *${session.currentProduct!.name}* deseas?`;
+      return `⚠️ La cantidad máxima por producto es 20.\n\n¿Cuántas ${this.quantityLabel(session)} de *${session.currentProduct!.name}* deseas?`;
     }
 
     session.pendingItem!.quantity = quantity;
