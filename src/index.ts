@@ -3,7 +3,7 @@
 
 import dotenv from 'dotenv';
 import express, { type NextFunction, type Request, type Response } from 'express';
-import { pool } from './infrastructure/database/connection.js';
+import { initDatabase, pool } from './infrastructure/database/connection.js';
 
 import ordersRouter from './api/routes/orders.js';
 import productsRouter from './api/routes/products.js';
@@ -72,6 +72,8 @@ async function startServer() {
     await client.query('SELECT NOW()');
     client.release();
     console.log('✅ PostgreSQL connected');
+    await initDatabase();
+    console.log('✅ Database schema initialized');
   } catch (err) {
     console.error('❌ PostgreSQL connection failed:', (err as Error).message);
     console.error('Make sure the database is running and DATABASE_URL is correct.');
