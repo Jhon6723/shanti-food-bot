@@ -1,111 +1,111 @@
 # 🍚 Arrocería Shanti - WhatsApp Bot
 
-Bot de WhatsApp para gestión de pedidos de arrocería, diseñado con **Spec Driven Development** en **TypeScript**.
+WhatsApp bot for rice restaurant order management, designed with **Spec Driven Development** in **TypeScript**.
 
-## Arquitectura
+## Architecture
 
 ```
-specs/                    # Especificaciones primero
+specs/                    # Specifications first
 ├── openapi.yaml         # API REST specification
 └── whatsapp-flows.md    # Conversational flows
 
 src/
-├── types/               # Tipos compartidos (tipado fuerte)
+├── types/               # Shared types (strong typing)
 │   └── index.ts
-├── domain/              # Lógica de negocio pura
+├── domain/              # Pure business logic
 │   └── models/
-│       ├── Order.ts     # Entidad pedido
-│       └── Product.ts   # Catálogo de productos
-├── api/                 # REST API (implementa specs)
+│       ├── Order.ts     # Order entity
+│       └── Product.ts   # Product catalog
+├── api/                 # REST API (implements specs)
 │   └── routes/
 │       ├── orders.ts
 │       ├── products.ts
 │       └── webhook.ts
-├── bot/                 # Lógica del bot WhatsApp
-│   └── WhatsAppBot.ts   # Flujos conversacionales
-└── infrastructure/      # PostgreSQL + repositorios
+├── bot/                 # WhatsApp bot logic
+│   └── WhatsAppBot.ts   # Conversational flows
+└── infrastructure/      # PostgreSQL + repositories
     ├── database/
     │   └── connection.ts
     └── repositories/
         └── OrderRepository.ts
 ```
 
-## Tecnologías
+## Technologies
 
-- **TypeScript** — Tipado estático en todo el proyecto
-- **Express** — API REST
-- **PostgreSQL** — Base de datos persistente
-- **Docker Compose** — Orquestación de servicios
+- **TypeScript** — Static typing throughout the project
+- **Express** — REST API
+- **PostgreSQL** — Persistent database
+- **Docker Compose** — Service orchestration
 
-## Características
+## Features
 
-- **Pedidos por WhatsApp**: Flujo conversacional completo
-- **Domicilio y Recogida**: Dos modalidades soportadas
-- **Pagos**: Efectivo contra entrega o Nequi
-- **Auto-confirmación**: Pedidos simples (<$50k) se confirman automáticamente
-- **Estado de pedidos**: Consulta en tiempo real
-- **Persistencia**: PostgreSQL con Docker
+- **WhatsApp Orders**: Complete conversational flow
+- **Delivery and Pickup**: Two supported modes
+- **Payments**: Cash on delivery or Nequi
+- **Auto-confirmation**: Simple orders (<$50k) auto-confirmed
+- **Order status**: Real-time queries
+- **Persistence**: PostgreSQL with Docker
 
-## Menú (basado en imágenes)
+## Menu (image-based)
 
-| Categoría | Productos | Precios |
-|-----------|-----------|---------|
-| Arroces Chinos | Pollo, Cerdo, Camarón, Especial | $18k - $28k |
-| Bandejas | Paisa, Pollo | $20k - $22k |
-| Bebidas | Coca-Cola, Jugos | $4k - $8k |
+| Category | Products | Prices |
+|----------|----------|--------|
+| Chinese Rice | Chicken, Pork, Shrimp, Special | $18k - $28k |
+| Trays | Paisa, Chicken | $20k - $22k |
+| Drinks | Coca-Cola, Juices | $4k - $8k |
 
-Domicilio: **$3,000** adicional  
-Tiempo estimado: **25-30 minutos**
+Delivery: **$3,000** additional  
+Estimated time: **25-30 minutes**
 
-## Inicio Rápido (Docker Compose)
+## Quick Start (Docker Compose)
 
 ```bash
-# Levantar PostgreSQL + Bot
+# Start PostgreSQL + Bot
 docker-compose up -d
 
-# Ver logs
+# View logs
 docker-compose logs -f app
 ```
 
-## Inicio Rápido (Local)
+## Quick Start (Local)
 
 ```bash
-# 1. Instalar dependencias
+# 1. Install dependencies
 npm install
 
-# 2. Configurar variables de entorno
+# 2. Configure environment variables
 cp .env.example .env
-# Editar .env con tus credenciales (PostgreSQL)
+# Edit .env with your credentials (PostgreSQL)
 
-# 3. Crear base de datos (si no usas Docker)
-# Asegúrate de tener PostgreSQL corriendo localmente
+# 3. Create database (if not using Docker)
+# Make sure PostgreSQL is running locally
 
-# 4. Iniciar en desarrollo
+# 4. Start in development
 npm run dev
 
-# 5. O compilar y correr en producción
+# 5. Or build and run in production
 npm run build
 npm start
 ```
 
 ## API Endpoints
 
-| Método | Endpoint | Descripción |
+| Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/health` | Health check |
-| GET | `/api/v1/products` | Menú completo |
-| POST | `/api/v1/orders` | Crear pedido |
-| GET | `/api/v1/orders` | Listar pedidos |
-| POST | `/api/v1/webhooks/whatsapp` | Webhook WhatsApp |
-| GET | `/api/v1/webhooks/test` | Probar bot |
+| GET | `/api/v1/products` | Full menu |
+| POST | `/api/v1/orders` | Create order |
+| GET | `/api/v1/orders` | List orders |
+| POST | `/api/v1/webhooks/whatsapp` | WhatsApp webhook |
+| GET | `/api/v1/webhooks/test` | Test bot |
 
-## Probar el Bot
+## Test the Bot
 
 ```bash
-# Saludo inicial
+# Initial greeting
 curl "http://localhost:3000/api/v1/webhooks/test?phone=3123456789&message=hola"
 
-# Hacer pedido por API
+# Place order via API
 curl -X POST http://localhost:3000/api/v1/orders \
   -H "Content-Type: application/json" \
   -d '{
@@ -117,25 +117,25 @@ curl -X POST http://localhost:3000/api/v1/orders \
   }'
 ```
 
-## Integración WhatsApp Business API
+## WhatsApp Business API Integration
 
-Para conectar con WhatsApp real:
+To connect with real WhatsApp:
 
-1. Crear app en [developers.facebook.com](https://developers.facebook.com)
-2. Configurar WhatsApp Business API
-3. Obtener Phone Number ID y Access Token
-4. Configurar webhook: `https://tudominio.com/api/v1/webhooks/whatsapp`
-5. Agregar variables a `.env`
+1. Create app at [developers.facebook.com](https://developers.facebook.com)
+2. Configure WhatsApp Business API
+3. Get Phone Number ID and Access Token
+4. Configure webhook: `https://yourdomain.com/api/v1/webhooks/whatsapp`
+5. Add variables to `.env`
 
 ## Spec Driven Development
 
-Este proyecto sigue el principio **specs-first**:
+This project follows the **specs-first** principle:
 
-1. **Diseñar specs**: `openapi.yaml` define contratos API
-2. **Diseñar flujos**: `whatsapp-flows.md` define UX conversacional
-3. **Implementar dominio**: Modelos tipados que cumplen specs
-4. **Implementar infraestructura**: API y bot sobre el dominio
+1. **Design specs**: `openapi.yaml` defines API contracts
+2. **Design flows**: `whatsapp-flows.md` defines conversational UX
+3. **Implement domain**: Typed models that fulfill specs
+4. **Implement infrastructure**: API and bot on top of domain
 
-## Licencia
+## License
 
 MIT
