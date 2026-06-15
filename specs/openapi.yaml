@@ -1,0 +1,254 @@
+openapi: 3.1.0
+info:
+  title: Shanti Food API
+  version: 1.0.0
+  description: API para gestión de pedidos de arrocería vía WhatsApp
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local development
+
+paths:
+  /orders:
+    post:
+      summary: Crear nuevo pedido
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderRequest'
+      responses:
+        '201':
+          description: Pedido creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Datos inválidos
+        '409':
+          description: Producto no disponible
+
+    get:
+      summary: Listar pedidos
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, confirmed, preparing, ready, delivered, cancelled]
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [delivery, pickup]
+      responses:
+        '200':
+          description: Lista de pedidos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+
+  /orders/{orderId}:
+    get:
+      summary: Obtener pedido por ID
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detalle del pedido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '404':
+          description: Pedido no encontrado
+
+    patch:
+      summary: Actualizar estado del pedido
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [pending, confirmed, preparing, ready, delivered, cancelled]
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Pedido actualizado
+
+  /products:
+    get:
+      summary: Listar productos del menú
+      responses:
+        '200':
+          description: Lista de productos disponibles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+
+  /webhooks/whatsapp:
+    post:
+      summary: Webhook para mensajes de WhatsApp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WhatsAppWebhook'
+      responses:
+        '200':
+          description: Mensaje procesado
+
+components:
+  schemas:
+    OrderRequest:
+      type: object
+      required: [customer, items, type, paymentMethod]
+      properties:
+        customer:
+          $ref: '#/components/schemas/Customer'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+          minItems: 1
+        type:
+          type: string
+          enum: [delivery, pickup]
+        address:
+          type: string
+          description: Requerido si type es delivery
+        paymentMethod:
+          type: string
+          enum: [cash, nequi]
+        notes:
+          type: string
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+        customer:
+          $ref: '#/components/schemas/Customer'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        type:
+          type: string
+          enum: [delivery, pickup]
+        address:
+          type: string
+        paymentMethod:
+          type: string
+        subtotal:
+          type: number
+        deliveryFee:
+          type: number
+        total:
+          type: number
+        status:
+          type: string
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        estimatedReadyAt:
+          type: string
+          format: date-time
+
+    Customer:
+      type: object
+      required: [name, phone]
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+          pattern: '^\+?[0-9]{10,15}$'
+
+    OrderItem:
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+        customizations:
+          type: array
+          items:
+            type: string
+          description: Ej. ["sin cebolla", "picante"]
+        notes:
+          type: string
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+          enum: [arroz_chino, bandeja_paisa, bebidas, otros]
+        price:
+          type: number
+        description:
+          type: string
+        available:
+          type: boolean
+        preparationMinutes:
+          type: integer
+
+    WhatsAppWebhook:
+      type: object
+      properties:
+        messageId:
+          type: string
+        from:
+          type: string
+        type:
+          type: string
+          enum: [text, interactive, location, order]
+        text:
+          type: object
+          properties:
+            body:
+              type: string
+        interactive:
+          type: object
+          properties:
+            type:
+              type: string
+            buttonReply:
+              type: object
+            listReply:
+              type: object
