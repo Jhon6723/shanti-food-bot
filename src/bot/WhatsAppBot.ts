@@ -79,6 +79,7 @@ const sessions = new Map<string, Session>();
 
 export class WhatsAppBot {
   private readonly deliveryFee = 3000;
+  private readonly restaurantAddress = process.env.BUSINESS_ADDRESS ?? 'Consultar dirección con el restaurante';
   private readonly repo: typeof orderRepository;
 
   constructor(repo?: typeof orderRepository) {
@@ -425,7 +426,7 @@ Responde con el número de la opción.`;
       session.type = 'pickup';
       session.total = session.subtotal;
       session.step = 'payment';
-      return `🏪 *Recogida en restaurante*\n\nDirección: Calle Principal #10-20, Barrio Shanti\n\n¿Método de pago?\n\n1️⃣ 💵 Efectivo (al recoger)\n2️⃣ 📱 Nequi (transferencia)\n\n_(Escribe *0* o *volver* para regresar)_`;
+      return `🏪 *Recogida en restaurante*\n\nDirección: ${this.restaurantAddress}\n\n¿Método de pago?\n\n1️⃣ 💵 Efectivo (al recoger)\n2️⃣ 📱 Nequi (transferencia)\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
     return `Opción no reconocida.\n\n¿Cómo deseas recibir tu pedido?\n\n1️⃣ 🛵 Domicilio (+$3.000)\n2️⃣ 🏪 Recoger en restaurante\n\n_(Escribe *0* o *volver* para regresar)_`;
   }
@@ -453,19 +454,22 @@ Responde con el número de la opción.`;
       return `¿Cómo deseas recibir tu pedido?\n\n1️⃣ 🛵 Domicilio (+$3.000)\n2️⃣ 🏪 Recoger en restaurante\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
 
+    const hasBarrio = /\b(barrio|brio|sector|urb|urbanizacion|urbanización|conjunto|torres?|apto|apartamento|casa|bloque|edificio|lote|lt)\b/i;
     const streetAddress = /^(calle|cll|carrera|cra|cr|avenida|av|transversal|trans|tv|diagonal|diag)\b.{4,}/i;
     const manzanaAddress = /^(manzana|mz)\b.{2,}/i;
     const kmAddress = /^km\s*\d/i;
     const ruralAddress = /^(vereda|corregimiento|finca|hacienda)\b/i;
-    const descriptiveAddress = /\b(apto|apartamento|casa|conjunto|torre|bloque|barrio|unidad|edificio|local|lote|lt)\b/i;
-    const isValid =
-      streetAddress.test(text.trim()) ||
-      manzanaAddress.test(text.trim()) ||
-      kmAddress.test(text.trim()) ||
-      ruralAddress.test(text.trim()) ||
-      descriptiveAddress.test(text.trim());
+    const t = text.trim();
+    const isStreet = streetAddress.test(t);
+    const isManzana = manzanaAddress.test(t);
+    const isKm = kmAddress.test(t);
+    const isRural = ruralAddress.test(t);
+    if (isStreet && !hasBarrio.test(t)) {
+      return `📍 Por favor incluye el barrio o sector en tu dirección.\n\nEjemplo: "Carrera 45 #12-34, *Barrio Centro*"`;
+    }
+    const isValid = isStreet || isManzana || isKm || isRural || hasBarrio.test(t);
     if (!isValid) {
-      return `📍 Por favor escribe una dirección válida.\n\nEjemplos:\n• "Carrera 45 #12-34, Barrio Centro"\n• "Calle 10 # 5-20"\n• "Manzana 5 Casa 12, Urb. Los Almendros"\n• "Km 4 vía al Norte"\n• "Conjunto Los Pinos, Torre 2 Apto 301"`;
+      return `📍 Por favor escribe una dirección válida con barrio o sector.\n\nEjemplos:\n• "Carrera 45 #12-34, Barrio Centro"\n• "Manzana 5 Casa 12, Urb. Los Almendros"\n• "Km 4 vía al Norte"\n• "Conjunto Los Pinos, Torre 2 Apto 301"`;
     }
 
     session.address = text;
@@ -526,7 +530,7 @@ Responde con el número de la opción.`;
     if (session.type === 'delivery') summary += `*Domicilio:* $3.000\n`;
     summary += `\n💰 *TOTAL: $${session.total.toLocaleString()}*\n\n`;
     if (session.type === 'delivery') summary += `📍 Entrega: ${session.address}\n`;
-    else summary += `🏪 Recoger en: Calle Principal #10-20\n`;
+    else summary += `🏪 Recoger en: ${this.restaurantAddress}\n`;
     summary += `💳 Pago: ${session.paymentMethod === 'cash' ? 'Efectivo' : 'Nequi'}\n\n`;
     summary += `⏱️ Tiempo estimado: 25-30 minutos\n\n¿Confirmas el pedido?\n1️⃣ ✅ Sí, confirmar\n2️⃣ ❌ Cancelar\n3️⃣ ✏️ Modificar`;
     return summary;

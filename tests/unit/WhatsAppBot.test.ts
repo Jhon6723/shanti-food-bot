@@ -137,7 +137,7 @@ describe('WhatsAppBot — order flow (happy path)', () => {
     await bot.handleMessage(PHONE, msg('1'));
     await bot.handleMessage(PHONE, msg('2'));
     await bot.handleMessage(PHONE, msg('1'));
-    const res = await bot.handleMessage(PHONE, msg('Carrera 10 #20-30'));
+    const res = await bot.handleMessage(PHONE, msg('Carrera 10 #20-30, Barrio Centro'));
     expect(res).toContain('nota');
   });
 
@@ -148,7 +148,7 @@ describe('WhatsAppBot — order flow (happy path)', () => {
     await bot.handleMessage(PHONE, msg('1'));
     await bot.handleMessage(PHONE, msg('2'));
     await bot.handleMessage(PHONE, msg('1'));
-    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30'));
+    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30, Barrio Centro'));
     const res = await bot.handleMessage(PHONE, msg('no'));
     expect(res).toContain('pago');
     expect(res).toContain('Efectivo');
@@ -161,7 +161,7 @@ describe('WhatsAppBot — order flow (happy path)', () => {
     await bot.handleMessage(PHONE, msg('1'));
     await bot.handleMessage(PHONE, msg('2'));
     await bot.handleMessage(PHONE, msg('1'));
-    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30'));
+    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30, Barrio Centro'));
     await bot.handleMessage(PHONE, msg('no')); // skip notas
     const res = await bot.handleMessage(PHONE, msg('1')); // Efectivo
     expect(res).toContain('RESUMEN');
@@ -180,7 +180,7 @@ describe('WhatsAppBot — order flow (happy path)', () => {
     await bot.handleMessage(PHONE, msg('1'));
     await bot.handleMessage(PHONE, msg('2'));
     await bot.handleMessage(PHONE, msg('1'));
-    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30'));
+    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30, Barrio Centro'));
     await bot.handleMessage(PHONE, msg('no')); // skip notas
     await bot.handleMessage(PHONE, msg('1'));
     const res = await bot.handleMessage(PHONE, msg('1')); // Confirmar
@@ -196,7 +196,7 @@ describe('WhatsAppBot — order flow (happy path)', () => {
     await bot.handleMessage(PHONE, msg('1'));
     await bot.handleMessage(PHONE, msg('2'));
     await bot.handleMessage(PHONE, msg('1'));
-    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30'));
+    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30, Barrio Centro'));
     await bot.handleMessage(PHONE, msg('no')); // skip notas
     await bot.handleMessage(PHONE, msg('2')); // Nequi
     const res = await bot.handleMessage(PHONE, msg('1')); // Confirmar
@@ -280,9 +280,21 @@ describe('WhatsAppBot — order flow (sad paths)', () => {
     expect(res).toContain('dirección válida');
   });
 
-  it('accepts valid colombian address: Calle format', async () => {
+  it('rejects street address without barrio/sector', async () => {
     await goToAddressStep(bot);
     const res = await bot.handleMessage(PHONE, msg('Calle 45 #12-34'));
+    expect(res).toContain('barrio');
+  });
+
+  it('accepts street address with barrio', async () => {
+    await goToAddressStep(bot);
+    const res = await bot.handleMessage(PHONE, msg('Calle 45 #12-34, Barrio Centro'));
+    expect(res).toContain('nota');
+  });
+
+  it('accepts valid colombian address: Calle format', async () => {
+    await goToAddressStep(bot);
+    const res = await bot.handleMessage(PHONE, msg('Calle 45 #12-34, Barrio El Prado'));
     expect(res).toContain('nota');
   });
 
@@ -294,13 +306,13 @@ describe('WhatsAppBot — order flow (sad paths)', () => {
 
   it('accepts valid colombian address: Cra abbreviation', async () => {
     await goToAddressStep(bot);
-    const res = await bot.handleMessage(PHONE, msg('Cra 15 No. 80-23'));
+    const res = await bot.handleMessage(PHONE, msg('Cra 15 No. 80-23, Barrio La Floresta'));
     expect(res).toContain('nota');
   });
 
   it('accepts valid colombian address: Avenida format', async () => {
     await goToAddressStep(bot);
-    const res = await bot.handleMessage(PHONE, msg('Av. El Dorado 123-45'));
+    const res = await bot.handleMessage(PHONE, msg('Av. El Dorado 123-45, Barrio Modelia'));
     expect(res).toContain('nota');
   });
 
@@ -336,20 +348,20 @@ describe('WhatsAppBot — order flow (sad paths)', () => {
 
   it('asks for delivery notes after valid address', async () => {
     await goToAddressStep(bot);
-    const res = await bot.handleMessage(PHONE, msg('Calle 45 #12-34'));
+    const res = await bot.handleMessage(PHONE, msg('Calle 45 #12-34, Barrio Centro'));
     expect(res).toContain('nota');
   });
 
   it('proceeds to payment after delivery notes', async () => {
     await goToAddressStep(bot);
-    await bot.handleMessage(PHONE, msg('Calle 45 #12-34'));
+    await bot.handleMessage(PHONE, msg('Calle 45 #12-34, Barrio Centro'));
     const res = await bot.handleMessage(PHONE, msg('Casa azul, timbre no funciona'));
     expect(res).toContain('Método de pago');
   });
 
   it('proceeds to payment when user skips delivery notes', async () => {
     await goToAddressStep(bot);
-    await bot.handleMessage(PHONE, msg('Calle 45 #12-34'));
+    await bot.handleMessage(PHONE, msg('Calle 45 #12-34, Barrio Centro'));
     const res = await bot.handleMessage(PHONE, msg('no'));
     expect(res).toContain('Método de pago');
   });
@@ -363,7 +375,7 @@ describe('WhatsAppBot — order flow (sad paths)', () => {
     await bot.handleMessage(PHONE, msg('1'));
     await bot.handleMessage(PHONE, msg('2'));
     await bot.handleMessage(PHONE, msg('1'));
-    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30'));
+    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30, Barrio Centro'));
     await bot.handleMessage(PHONE, msg('no')); // skip notas
     await bot.handleMessage(PHONE, msg('1'));
     const res = await bot.handleMessage(PHONE, msg('2')); // Cancelar
@@ -543,7 +555,7 @@ describe('WhatsAppBot — modify flow', () => {
     await bot.handleMessage(PHONE, msg('1'));
     await bot.handleMessage(PHONE, msg('2'));
     await bot.handleMessage(PHONE, msg('1'));
-    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30'));
+    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30, Barrio Centro'));
     await bot.handleMessage(PHONE, msg('no')); // skip notas
     await bot.handleMessage(PHONE, msg('1'));
   }
