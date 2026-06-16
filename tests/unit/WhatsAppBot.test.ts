@@ -575,4 +575,15 @@ describe('WhatsAppBot — modify flow', () => {
     const res = await bot.handleMessage(PHONE, msg('4'));
     expect(res).toContain('cancelado');
   });
+
+  it('after modify→add product→finalizar goes back to confirm (not delivery_type)', async () => {
+    await reachConfirmation();
+    await bot.handleMessage(PHONE, msg('3')); // Modificar
+    await bot.handleMessage(PHONE, msg('1')); // Agregar más productos
+    await bot.handleMessage(PHONE, msg('7')); // Coca-Cola 400ml
+    await bot.handleMessage(PHONE, msg('1')); // 1 unidad
+    const res = await bot.handleMessage(PHONE, msg('2')); // finalizar
+    expect(res).toContain('RESUMEN');
+    expect(res).not.toContain('¿Cómo deseas recibir tu pedido?');
+  });
 });

@@ -386,6 +386,11 @@ Responde con el número de la opción.`;
       return `${this.showProductList()}\n\nResponde con el número del producto.\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
     if (text === '2' || text === 'no' || text === 'finalizar') {
+      if (session.type) {
+        session.total = session.subtotal + (session.type === 'delivery' ? this.deliveryFee : 0);
+        session.step = 'confirm';
+        return this.showOrderSummary(session);
+      }
       session.step = 'delivery_type';
       return `Perfecto. *Total de productos: $${session.subtotal.toLocaleString()}*\n\n¿Cómo deseas recibir tu pedido?\n\n1️⃣ 🛵 Domicilio (+$3.000)\n2️⃣ 🏪 Recoger en restaurante\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
