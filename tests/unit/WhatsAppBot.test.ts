@@ -129,7 +129,7 @@ describe('WhatsAppBot — order flow (happy path)', () => {
     expect(res).toContain('dirección');
   });
 
-  it('asks for payment method after address', async () => {
+  it('asks for delivery notes after address', async () => {
     await startOrder();
     await bot.handleMessage(PHONE, msg('1'));
     await bot.handleMessage(PHONE, msg('4'));
@@ -137,6 +137,18 @@ describe('WhatsAppBot — order flow (happy path)', () => {
     await bot.handleMessage(PHONE, msg('2'));
     await bot.handleMessage(PHONE, msg('1'));
     const res = await bot.handleMessage(PHONE, msg('Carrera 10 #20-30'));
+    expect(res).toContain('nota');
+  });
+
+  it('asks for payment method after delivery notes', async () => {
+    await startOrder();
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('4'));
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('2'));
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30'));
+    const res = await bot.handleMessage(PHONE, msg('no'));
     expect(res).toContain('pago');
     expect(res).toContain('Efectivo');
   });
@@ -149,6 +161,7 @@ describe('WhatsAppBot — order flow (happy path)', () => {
     await bot.handleMessage(PHONE, msg('2'));
     await bot.handleMessage(PHONE, msg('1'));
     await bot.handleMessage(PHONE, msg('Carrera 10 #20-30'));
+    await bot.handleMessage(PHONE, msg('no')); // skip notas
     const res = await bot.handleMessage(PHONE, msg('1')); // Efectivo
     expect(res).toContain('RESUMEN');
     expect(res).toContain('Arroz Chino de Pollo');
@@ -167,6 +180,7 @@ describe('WhatsAppBot — order flow (happy path)', () => {
     await bot.handleMessage(PHONE, msg('2'));
     await bot.handleMessage(PHONE, msg('1'));
     await bot.handleMessage(PHONE, msg('Carrera 10 #20-30'));
+    await bot.handleMessage(PHONE, msg('no')); // skip notas
     await bot.handleMessage(PHONE, msg('1'));
     const res = await bot.handleMessage(PHONE, msg('1')); // Confirmar
     expect(res).toContain('PEDIDO CONFIRMADO');
@@ -182,6 +196,7 @@ describe('WhatsAppBot — order flow (happy path)', () => {
     await bot.handleMessage(PHONE, msg('2'));
     await bot.handleMessage(PHONE, msg('1'));
     await bot.handleMessage(PHONE, msg('Carrera 10 #20-30'));
+    await bot.handleMessage(PHONE, msg('no')); // skip notas
     await bot.handleMessage(PHONE, msg('2')); // Nequi
     const res = await bot.handleMessage(PHONE, msg('1')); // Confirmar
     expect(res).toContain('Nequi');
@@ -241,17 +256,101 @@ describe('WhatsAppBot — order flow (sad paths)', () => {
     expect(res).toContain('20');
   });
 
-  it('rejects address shorter than 5 chars', async () => {
-    await bot.handleMessage(PHONE, msg('hola'));
-    await bot.handleMessage(PHONE, msg('2'));
-    await bot.handleMessage(PHONE, msg('Carlos'));
-    await bot.handleMessage(PHONE, msg('1'));
-    await bot.handleMessage(PHONE, msg('4'));
-    await bot.handleMessage(PHONE, msg('1'));
-    await bot.handleMessage(PHONE, msg('2'));
-    await bot.handleMessage(PHONE, msg('1')); // Domicilio
+  async function goToAddressStep(b: WhatsAppBot) {
+    await b.handleMessage(PHONE, msg('hola'));
+    await b.handleMessage(PHONE, msg('2'));
+    await b.handleMessage(PHONE, msg('Carlos'));
+    await b.handleMessage(PHONE, msg('1'));  // producto
+    await b.handleMessage(PHONE, msg('4'));  // Ninguna
+    await b.handleMessage(PHONE, msg('1'));  // cantidad
+    await b.handleMessage(PHONE, msg('2'));  // finalizar
+    await b.handleMessage(PHONE, msg('1'));  // Domicilio → address step
+  }
+
+  it('rejects single punctuation as address', async () => {
+    await goToAddressStep(bot);
     const res = await bot.handleMessage(PHONE, msg('.'));
     expect(res).toContain('dirección válida');
+  });
+
+  it('rejects generic short text as address', async () => {
+    await goToAddressStep(bot);
+    const res = await bot.handleMessage(PHONE, msg('que tal como está?'));
+    expect(res).toContain('dirección válida');
+  });
+
+  it('accepts valid colombian address: Calle format', async () => {
+    await goToAddressStep(bot);
+    const res = await bot.handleMessage(PHONE, msg('Calle 45 #12-34'));
+    expect(res).toContain('nota');
+  });
+
+  it('accepts valid colombian address: Carrera format', async () => {
+    await goToAddressStep(bot);
+    const res = await bot.handleMessage(PHONE, msg('Carrera 7 # 45-67, Barrio Centro'));
+    expect(res).toContain('nota');
+  });
+
+  it('accepts valid colombian address: Cra abbreviation', async () => {
+    await goToAddressStep(bot);
+    const res = await bot.handleMessage(PHONE, msg('Cra 15 No. 80-23'));
+    expect(res).toContain('nota');
+  });
+
+  it('accepts valid colombian address: Avenida format', async () => {
+    await goToAddressStep(bot);
+    const res = await bot.handleMessage(PHONE, msg('Av. El Dorado 123-45'));
+    expect(res).toContain('nota');
+  });
+
+  it('accepts descriptive address with apartment/conjunto', async () => {
+    await goToAddressStep(bot);
+    const res = await bot.handleMessage(PHONE, msg('Conjunto Residencial Los Pinos, Torre 3 Apto 204'));
+    expect(res).toContain('nota');
+  });
+
+  it('accepts manzana/casa format', async () => {
+    await goToAddressStep(bot);
+    const res = await bot.handleMessage(PHONE, msg('Manzana 5 Casa 12, Urb. Los Almendros'));
+    expect(res).toContain('nota');
+  });
+
+  it('accepts Mz abbreviation', async () => {
+    await goToAddressStep(bot);
+    const res = await bot.handleMessage(PHONE, msg('Mz 3 Lt 8, Barrio El Remanso'));
+    expect(res).toContain('nota');
+  });
+
+  it('accepts km/via format', async () => {
+    await goToAddressStep(bot);
+    const res = await bot.handleMessage(PHONE, msg('Km 4 vía al Norte, finca La Esperanza'));
+    expect(res).toContain('nota');
+  });
+
+  it('accepts vereda/rural format', async () => {
+    await goToAddressStep(bot);
+    const res = await bot.handleMessage(PHONE, msg('Vereda El Palmar, casa blanca cerca al colegio'));
+    expect(res).toContain('nota');
+  });
+
+  it('asks for delivery notes after valid address', async () => {
+    await goToAddressStep(bot);
+    const res = await bot.handleMessage(PHONE, msg('Calle 45 #12-34'));
+    expect(res).toContain('nota');
+  });
+
+  it('proceeds to payment after delivery notes', async () => {
+    await goToAddressStep(bot);
+    await bot.handleMessage(PHONE, msg('Calle 45 #12-34'));
+    const res = await bot.handleMessage(PHONE, msg('Casa azul, timbre no funciona'));
+    expect(res).toContain('Método de pago');
+  });
+
+  it('proceeds to payment when user skips delivery notes', async () => {
+    await goToAddressStep(bot);
+    await bot.handleMessage(PHONE, msg('Calle 45 #12-34'));
+    const res = await bot.handleMessage(PHONE, msg('no'));
+    expect(res).toContain('Método de pago');
   });
 
   it('cancel cancels the order', async () => {
@@ -264,6 +363,7 @@ describe('WhatsAppBot — order flow (sad paths)', () => {
     await bot.handleMessage(PHONE, msg('2'));
     await bot.handleMessage(PHONE, msg('1'));
     await bot.handleMessage(PHONE, msg('Carrera 10 #20-30'));
+    await bot.handleMessage(PHONE, msg('no')); // skip notas
     await bot.handleMessage(PHONE, msg('1'));
     const res = await bot.handleMessage(PHONE, msg('2')); // Cancelar
     expect(res).toContain('cancelado');
@@ -443,6 +543,7 @@ describe('WhatsAppBot — modify flow', () => {
     await bot.handleMessage(PHONE, msg('2'));
     await bot.handleMessage(PHONE, msg('1'));
     await bot.handleMessage(PHONE, msg('Carrera 10 #20-30'));
+    await bot.handleMessage(PHONE, msg('no')); // skip notas
     await bot.handleMessage(PHONE, msg('1'));
   }
 

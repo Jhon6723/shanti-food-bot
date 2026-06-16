@@ -22,6 +22,7 @@ type BotStep =
   | 'add_more'
   | 'delivery_type'
   | 'address'
+  | 'delivery_notes'
   | 'payment'
   | 'confirm'
   | 'modify';
@@ -33,6 +34,7 @@ interface SessionState {
   total: number;
   type: OrderType | null;
   address: string | null;
+  deliveryNotes: string | null;
   paymentMethod: PaymentMethod | null;
   currentProduct: Product | null;
   pendingItem: OrderItemData | null;
@@ -46,6 +48,7 @@ class Session {
   total = 0;
   type: OrderType | null = null;
   address: string | null = null;
+  deliveryNotes: string | null = null;
   paymentMethod: PaymentMethod | null = null;
   currentProduct: Product | null = null;
   pendingItem: OrderItemData | null = null;
@@ -60,6 +63,7 @@ class Session {
     this.total = 0;
     this.type = null;
     this.address = null;
+    this.deliveryNotes = null;
     this.paymentMethod = null;
     this.currentProduct = null;
     this.pendingItem = null;
@@ -127,6 +131,8 @@ export class WhatsAppBot {
         return this.handleDeliveryType(text, session);
       case 'address':
         return this.handleAddress(text, session);
+      case 'delivery_notes':
+        return this.handleDeliveryNotes(text, session);
       case 'payment':
         return this.handlePayment(text, session);
       case 'confirm':
@@ -413,13 +419,38 @@ Responde con el número de la opción.`;
       return `¿Cómo deseas recibir tu pedido?\n\n1️⃣ 🛵 Domicilio (+$3.000)\n2️⃣ 🏪 Recoger en restaurante\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
 
-    if (text.trim().length < 5) {
-      return `📍 Por favor escribe una dirección válida.\n\nEjemplo: "Carrera 45 #12-34, Barrio San Fernando"`;
+    const streetAddress = /^(calle|cll|carrera|cra|cr|avenida|av|transversal|trans|tv|diagonal|diag)\b.{4,}/i;
+    const manzanaAddress = /^(manzana|mz)\b.{2,}/i;
+    const kmAddress = /^km\s*\d/i;
+    const ruralAddress = /^(vereda|corregimiento|finca|hacienda)\b/i;
+    const descriptiveAddress = /\b(apto|apartamento|casa|conjunto|torre|bloque|barrio|unidad|edificio|local|lote|lt)\b/i;
+    const isValid =
+      streetAddress.test(text.trim()) ||
+      manzanaAddress.test(text.trim()) ||
+      kmAddress.test(text.trim()) ||
+      ruralAddress.test(text.trim()) ||
+      descriptiveAddress.test(text.trim());
+    if (!isValid) {
+      return `📍 Por favor escribe una dirección válida.\n\nEjemplos:\n• "Carrera 45 #12-34, Barrio Centro"\n• "Calle 10 # 5-20"\n• "Manzana 5 Casa 12, Urb. Los Almendros"\n• "Km 4 vía al Norte"\n• "Conjunto Los Pinos, Torre 2 Apto 301"`;
     }
 
     session.address = text;
+    session.step = 'delivery_notes';
+    return `📍 Dirección guardada: *${text}*\n\n¿Tienes alguna nota de entrega? (piso, color de casa, referencia, etc.)\n\nEscribe tu nota o *"no"* para continuar.`;
+  }
+
+  private handleDeliveryNotes(text: string, session: Session): string {
+    if (text === '0' || text === 'atras' || text === 'volver') {
+      session.step = 'address';
+      return `🛵 Domicilio\n\nPor favor escribe tu dirección completa:\n\n_(Escribe *0* o *volver* para regresar)_`;
+    }
+
+    const skipWords = ['no', 'ninguna', 'nada', 'omitir', 'skip', 'continuar'];
+    if (!skipWords.includes(text.toLowerCase().trim())) {
+      session.deliveryNotes = text;
+    }
     session.step = 'payment';
-    return `📍 Dirección: ${text}\n\n¿Método de pago?\n\n1️⃣ 💵 Efectivo (contra entrega)\n2️⃣ 📱 Nequi (transferencia)\n\n_(Escribe *0* o *volver* para regresar)_`;
+    return `📝 Nota guardada.\n\n¿Método de pago?\n\n1️⃣ 💵 Efectivo (contra entrega)\n2️⃣ 📱 Nequi (transferencia)\n\n_(Escribe *0* o *volver* para regresar)_`;
   }
 
   private handlePayment(text: string, session: Session): string {
@@ -510,6 +541,7 @@ Responde con el número de la opción.`;
       type: session.type!,
       address: session.address ?? undefined,
       paymentMethod: session.paymentMethod!,
+      notes: session.deliveryNotes ?? undefined,
     };
 
     try {
