@@ -150,6 +150,19 @@ export class OrderRepository {
     return row?.customer_name ?? null;
   }
 
+  async findLastDeliveryAddress(phone: string): Promise<string | null> {
+    const normalized = this.normalizePhone(phone);
+    const row = await queryOne<{ address: string }>(
+      `SELECT address FROM orders
+       WHERE (customer_phone = $1 OR customer_phone = $2 OR customer_phone = $3)
+         AND type = 'delivery'
+         AND address IS NOT NULL AND address <> ''
+       ORDER BY created_at DESC LIMIT 1`,
+      [normalized, `+57${normalized}`, `57${normalized}`]
+    );
+    return row?.address ?? null;
+  }
+
   async update(order: Order): Promise<Order> {
     return this.save(order);
   }

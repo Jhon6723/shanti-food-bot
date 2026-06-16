@@ -15,6 +15,7 @@ function makeRepo(overrides: Partial<OrderRepository> = {}): OrderRepository {
     update: vi.fn().mockResolvedValue(undefined),
     delete: vi.fn().mockResolvedValue(false),
     getStats: vi.fn().mockResolvedValue({}),
+    findLastDeliveryAddress: vi.fn().mockResolvedValue(null),
     ...overrides,
   } as unknown as OrderRepository;
 }
@@ -585,5 +586,60 @@ describe('WhatsAppBot — modify flow', () => {
     const res = await bot.handleMessage(PHONE, msg('2')); // finalizar
     expect(res).toContain('RESUMEN');
     expect(res).not.toContain('¿Cómo deseas recibir tu pedido?');
+  });
+});
+
+describe('WhatsAppBot — last address reuse', () => {
+  async function goToDeliveryType(bot: WhatsAppBot) {
+    await bot.handleMessage(PHONE, msg('hola'));
+    await bot.handleMessage(PHONE, msg('2'));
+    await bot.handleMessage(PHONE, msg('Carlos'));
+    await bot.handleMessage(PHONE, msg('1'));  // producto
+    await bot.handleMessage(PHONE, msg('4'));  // Ninguna
+    await bot.handleMessage(PHONE, msg('1'));  // cantidad
+    await bot.handleMessage(PHONE, msg('2'));  // finalizar
+    return bot.handleMessage(PHONE, msg('1')); // Domicilio
+  }
+
+  it('offers last address when customer has a previous delivery order', async () => {
+    const repo = makeRepo({
+      findLastDeliveryAddress: vi.fn().mockResolvedValue('Carrera 45 #12-34'),
+    });
+    const bot = new WhatsAppBot(repo);
+    const res = await goToDeliveryType(bot);
+    expect(res).toContain('Carrera 45 #12-34');
+    expect(res).toContain('1');
+    expect(res).toContain('2');
+  });
+
+  it('goes straight to address input when no previous address exists', async () => {
+    const repo = makeRepo({
+      findLastDeliveryAddress: vi.fn().mockResolvedValue(null),
+    });
+    const bot = new WhatsAppBot(repo);
+    const res = await goToDeliveryType(bot);
+    expect(res).toContain('dirección');
+    expect(res).not.toContain('anterior');
+  });
+
+  it('reuses last address when user picks option 1', async () => {
+    const repo = makeRepo({
+      findLastDeliveryAddress: vi.fn().mockResolvedValue('Carrera 45 #12-34'),
+    });
+    const bot = new WhatsAppBot(repo);
+    await goToDeliveryType(bot);
+    const res = await bot.handleMessage(PHONE, msg('1')); // usar dirección anterior
+    expect(res).toContain('nota');
+  });
+
+  it('goes to address input when user picks option 2 (enter new address)', async () => {
+    const repo = makeRepo({
+      findLastDeliveryAddress: vi.fn().mockResolvedValue('Carrera 45 #12-34'),
+    });
+    const bot = new WhatsAppBot(repo);
+    await goToDeliveryType(bot);
+    const res = await bot.handleMessage(PHONE, msg('2')); // escribir nueva
+    expect(res).toContain('dirección');
+    expect(res).not.toContain('anterior');
   });
 });

@@ -22,6 +22,7 @@ type BotStep =
   | 'add_more'
   | 'delivery_type'
   | 'address'
+  | 'address_confirm'
   | 'delivery_notes'
   | 'payment'
   | 'confirm'
@@ -34,6 +35,7 @@ interface SessionState {
   total: number;
   type: OrderType | null;
   address: string | null;
+  lastAddress: string | null;
   deliveryNotes: string | null;
   paymentMethod: PaymentMethod | null;
   currentProduct: Product | null;
@@ -48,6 +50,7 @@ class Session {
   total = 0;
   type: OrderType | null = null;
   address: string | null = null;
+  lastAddress: string | null = null;
   deliveryNotes: string | null = null;
   paymentMethod: PaymentMethod | null = null;
   currentProduct: Product | null = null;
@@ -63,6 +66,7 @@ class Session {
     this.total = 0;
     this.type = null;
     this.address = null;
+    this.lastAddress = null;
     this.deliveryNotes = null;
     this.paymentMethod = null;
     this.currentProduct = null;
@@ -128,9 +132,11 @@ export class WhatsAppBot {
       case 'add_more':
         return this.handleAddMore(text, session);
       case 'delivery_type':
-        return this.handleDeliveryType(text, session);
+        return await this.handleDeliveryType(text, session, from);
       case 'address':
         return this.handleAddress(text, session);
+      case 'address_confirm':
+        return this.handleAddressConfirm(text, session);
       case 'delivery_notes':
         return this.handleDeliveryNotes(text, session);
       case 'payment':
@@ -397,7 +403,7 @@ Responde con el número de la opción.`;
     return `Opción no reconocida.\n\n*Total hasta ahora: $${session.subtotal.toLocaleString()}*\n\n¿Deseas agregar algo más?\n\n1️⃣ Sí, ver menú\n2️⃣ No, finalizar pedido\n\n_(Escribe *0* o *volver* para regresar)_`;
   }
 
-  private handleDeliveryType(text: string, session: Session): string {
+  private async handleDeliveryType(text: string, session: Session, from: string): Promise<string> {
     if (text === '0' || text === 'atras' || text === 'volver') {
       session.step = 'add_more';
       return `*Total hasta ahora: $${session.subtotal.toLocaleString()}*\n\n¿Deseas agregar algo más?\n\n1️⃣ Sí, ver menú\n2️⃣ No, finalizar pedido`;
@@ -406,6 +412,12 @@ Responde con el número de la opción.`;
     if (text === '1' || text.includes('domicilio')) {
       session.type = 'delivery';
       session.total = session.subtotal + this.deliveryFee;
+      const lastAddress = await this.repo.findLastDeliveryAddress(from);  // eslint-disable-line
+      if (lastAddress) {
+        session.lastAddress = lastAddress;
+        session.step = 'address_confirm';
+        return `🛵 *Domicilio seleccionado*\n\nTu última dirección de entrega fue:\n📍 *${lastAddress}*\n\n1️⃣ Usar esta dirección\n2️⃣ Escribir una dirección nueva\n\n_(Escribe *0* o *volver* para regresar)_`;
+      }
       session.step = 'address';
       return `🛵 *Domicilio seleccionado*\n\nPor favor comparte tu ubicación o escribe la dirección completa de entrega:\n\nEjemplo: "Carrera 45 #12-34, Barrio San Fernando"\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
@@ -416,6 +428,23 @@ Responde con el número de la opción.`;
       return `🏪 *Recogida en restaurante*\n\nDirección: Calle Principal #10-20, Barrio Shanti\n\n¿Método de pago?\n\n1️⃣ 💵 Efectivo (al recoger)\n2️⃣ 📱 Nequi (transferencia)\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
     return `Opción no reconocida.\n\n¿Cómo deseas recibir tu pedido?\n\n1️⃣ 🛵 Domicilio (+$3.000)\n2️⃣ 🏪 Recoger en restaurante\n\n_(Escribe *0* o *volver* para regresar)_`;
+  }
+
+  private handleAddressConfirm(text: string, session: Session): string {
+    if (text === '0' || text === 'atras' || text === 'volver') {
+      session.step = 'delivery_type';
+      return `¿Cómo deseas recibir tu pedido?\n\n1️⃣ 🛵 Domicilio (+$3.000)\n2️⃣ 🏪 Recoger en restaurante\n\n_(Escribe *0* o *volver* para regresar)_`;
+    }
+    if (text === '1') {
+      session.address = session.lastAddress!;
+      session.step = 'delivery_notes';
+      return `📍 Dirección guardada: *${session.address}*\n\n¿Tienes alguna nota de entrega? (piso, color de casa, referencia, etc.)\n\nEscribe tu nota o *"no"* para continuar.`;
+    }
+    if (text === '2') {
+      session.step = 'address';
+      return `🛵 Escribe tu nueva dirección completa:\n\nEjemplo: "Carrera 45 #12-34, Barrio San Fernando"\n\n_(Escribe *0* o *volver* para regresar)_`;
+    }
+    return `Por favor responde *1* para usar la dirección anterior o *2* para escribir una nueva.`;
   }
 
   private handleAddress(text: string, session: Session): string {
