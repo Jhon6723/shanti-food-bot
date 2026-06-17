@@ -131,8 +131,8 @@ router.get('/:id/stats', requireJWT, requireRole('admin'), async (req: Request, 
       [id]
     );
 
-    const recentResult = await pool.query<{ id: string; total: number; created_at: string }>(
-      `SELECT id, total, created_at FROM orders
+    const recentResult = await pool.query<{ id: string; total: number; created_at: string; customer_name: string }>(
+      `SELECT id, total, created_at, customer_name FROM orders
        WHERE delivered_by = $1 AND status = 'delivered'
        ORDER BY created_at DESC LIMIT 10`,
       [id]
