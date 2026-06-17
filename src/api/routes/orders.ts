@@ -141,7 +141,7 @@ router.patch('/:id', requireJWT, async (req: Request, res: Response) => {
           order.markReady();
           break;
         case 'delivered':
-          order.deliver();
+          order.deliver(req.user!.userId);
           break;
         case 'cancelled':
           order.cancel();

@@ -24,6 +24,7 @@ interface OrderRow {
   total: number;
   created_at: string;
   estimated_ready_at: string | null;
+  delivered_by: number | null;
 }
 
 interface OrderItemRow {
@@ -38,14 +39,15 @@ export class OrderRepository {
   async save(order: Order): Promise<Order> {
     // Insert order
     await query(
-      `INSERT INTO orders (id, customer_name, customer_phone, type, address, payment_method, status, notes, subtotal, delivery_fee, total, created_at, estimated_ready_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      `INSERT INTO orders (id, customer_name, customer_phone, type, address, payment_method, status, notes, subtotal, delivery_fee, total, created_at, estimated_ready_at, delivered_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        ON CONFLICT (id) DO UPDATE SET
          status = EXCLUDED.status,
          notes = EXCLUDED.notes,
          subtotal = EXCLUDED.subtotal,
          delivery_fee = EXCLUDED.delivery_fee,
-         total = EXCLUDED.total`,
+         total = EXCLUDED.total,
+         delivered_by = EXCLUDED.delivered_by`,
       [
         order.id,
         order.customer.name,
@@ -60,6 +62,7 @@ export class OrderRepository {
         order.total,
         order.createdAt,
         order.estimatedReadyAt ?? null,
+        order.deliveredBy ?? null,
       ]
     );
 
@@ -220,7 +223,7 @@ export class OrderRepository {
       [row.id]
     );
 
-    return new Order({
+    const order = new Order({
       id: row.id,
       customer: { name: row.customer_name, phone: row.customer_phone },
       items: itemRows.map((ir) => ({
@@ -238,6 +241,10 @@ export class OrderRepository {
       createdAt: row.created_at,
       estimatedReadyAt: row.estimated_ready_at ?? undefined,
     });
+    if (row.delivered_by) {
+      order.deliveredBy = row.delivered_by;
+    }
+    return order;
   }
 }
 

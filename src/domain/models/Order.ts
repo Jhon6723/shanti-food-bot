@@ -1,12 +1,12 @@
 // Domain Model: Order — based on specs/openapi.yaml
 
 import type {
-  OrderType,
-  PaymentMethod,
-  OrderStatus,
-  CustomerData,
-  OrderItemData,
-  OrderRequestData,
+    CustomerData,
+    OrderItemData,
+    OrderRequestData,
+    OrderStatus,
+    OrderType,
+    PaymentMethod,
 } from '../../types/index.js';
 
 export class Order {
@@ -23,6 +23,7 @@ export class Order {
   subtotal: number;
   deliveryFee: number;
   total: number;
+  deliveredBy?: number;
 
   constructor(data: OrderRequestData & { id?: string; status?: OrderStatus; createdAt?: string; estimatedReadyAt?: string }) {
     this.id = data.id ?? generateOrderId();
@@ -76,11 +77,12 @@ export class Order {
     return this;
   }
 
-  deliver(): this {
+  deliver(driverId?: number): this {
     if (this.status !== 'ready') {
       throw new Error('Order must be ready before delivery');
     }
     this.status = 'delivered';
+    this.deliveredBy = driverId;
     return this;
   }
 
@@ -107,6 +109,7 @@ export class Order {
     notes: string;
     createdAt: string;
     estimatedReadyAt: string;
+    deliveredBy?: number;
   } {
     return {
       id: this.id,
@@ -122,6 +125,7 @@ export class Order {
       notes: this.notes,
       createdAt: this.createdAt,
       estimatedReadyAt: this.estimatedReadyAt,
+      deliveredBy: this.deliveredBy,
     };
   }
 }

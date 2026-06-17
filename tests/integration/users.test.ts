@@ -197,7 +197,7 @@ describe('GET /api/v1/users/:id/stats', () => {
     mockPool.query
       .mockResolvedValueOnce({ rows: [mockUser] })
       .mockResolvedValueOnce({ rows: [{ total_delivered: '14', delivered_last_30_days: '5', total_amount: '280000' }] })
-      .mockResolvedValueOnce({ rows: [] });
+      .mockResolvedValueOnce({ rows: [{ id: 'SH-123', total: 20000, created_at: '2026-06-17T12:00:00Z', customer_name: 'Maria Garcia' }] });
     const res = await request(app)
       .get('/api/v1/users/2/stats')
       .set('Authorization', `Bearer ${adminToken}`);
@@ -205,5 +205,22 @@ describe('GET /api/v1/users/:id/stats', () => {
     expect(res.body).toHaveProperty('totalDelivered', 14);
     expect(res.body).toHaveProperty('totalAmount', 280000);
     expect(res.body).toHaveProperty('recentOrders');
+    expect(res.body.recentOrders).toHaveLength(1);
+    expect(res.body.recentOrders[0]).toHaveProperty('customer_name', 'Maria Garcia');
+  });
+
+  it('returns zero stats when driver has no delivered orders', async () => {
+    mockPool.query
+      .mockResolvedValueOnce({ rows: [mockUser] })
+      .mockResolvedValueOnce({ rows: [{ total_delivered: '0', delivered_last_30_days: '0', total_amount: '0' }] })
+      .mockResolvedValueOnce({ rows: [] });
+    const res = await request(app)
+      .get('/api/v1/users/2/stats')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('totalDelivered', 0);
+    expect(res.body).toHaveProperty('deliveredLast30Days', 0);
+    expect(res.body).toHaveProperty('totalAmount', 0);
+    expect(res.body.recentOrders).toHaveLength(0);
   });
 });

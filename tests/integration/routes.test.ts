@@ -309,10 +309,11 @@ describe('PATCH /api/v1/orders/:id — role enforcement', () => {
   });
 
   it('delivery: returns 200 when marking ready order as delivered', async () => {
+    const mockDeliver = vi.fn();
     mockRepo.findById.mockResolvedValueOnce({
       status: 'ready',
       confirm: vi.fn(), prepare: vi.fn(), markReady: vi.fn(),
-      deliver: vi.fn(), cancel: vi.fn(),
+      deliver: mockDeliver, cancel: vi.fn(),
       notes: '',
       toJSON: vi.fn().mockReturnValue({ id: 'SH-TEST', status: 'delivered' }),
     });
@@ -324,6 +325,7 @@ describe('PATCH /api/v1/orders/:id — role enforcement', () => {
       .send({ status: 'delivered' });
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('delivered');
+    expect(mockDeliver).toHaveBeenCalledWith(1); // userId from makeToken
   });
 
   it('admin: can cancel any order', async () => {
