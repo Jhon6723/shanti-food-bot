@@ -1,6 +1,7 @@
 // Entry point: Shanti Food WhatsApp Bot API
 // Spec Driven Development implementation
 
+import cors from 'cors';
 import dotenv from 'dotenv';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { initDatabase, pool } from './infrastructure/database/connection.js';
@@ -16,6 +17,21 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+// CORS — allow admin SPA origin in production and localhost for dev
+const allowedOrigins = [
+  'https://shanti-bot.pixpro.lat',
+  'http://localhost:5173',
+  'http://localhost:3000',
+];
+app.use(cors({
+  origin: (origin, cb) => {
+    // allow requests with no origin (curl, Postman, webhook)
+    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    cb(new Error(`CORS: origin ${origin} not allowed`));
+  },
+  credentials: true,
+}));
 
 // Middleware
 app.use(express.json());
