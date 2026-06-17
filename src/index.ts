@@ -4,9 +4,9 @@
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express, { type NextFunction, type Request, type Response } from 'express';
+import { join } from 'path';
 import { initDatabase, pool } from './infrastructure/database/connection.js';
 
-import { requireJWT } from './api/middleware/auth.js';
 import authRouter from './api/routes/auth.js';
 import ordersRouter from './api/routes/orders.js';
 import productsRouter from './api/routes/products.js';
@@ -54,10 +54,17 @@ app.get('/health', (_req: Request, res: Response) => {
 
 // API Routes per OpenAPI spec
 app.use('/api/v1/auth', authRouter);
-app.use('/api/v1/orders', requireJWT, ordersRouter);
+app.use('/api/v1/orders', ordersRouter);
 app.use('/api/v1/products', productsRouter);
 app.use('/api/v1/users', usersRouter);
 app.use('/api/v1/webhooks', webhookRouter);
+
+// Serve admin SPA static build
+const adminDist = join(process.cwd(), 'admin', 'dist');
+app.use('/admin', express.static(adminDist));
+app.get('/admin/*', (_req: Request, res: Response) => {
+  res.sendFile(join(adminDist, 'index.html'));
+});
 
 // Root redirect to API
 app.get('/', (_req: Request, res: Response) => {
