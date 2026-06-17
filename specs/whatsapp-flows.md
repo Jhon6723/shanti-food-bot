@@ -70,11 +70,36 @@ Bot: "Perfecto. Total hasta ahora: $36.000
 2. 🏪 Recoger en restaurante"
 ```
 
-### Opción 5: Si es Domicilio
+### Opción 5a: Si es Domicilio (cliente sin dirección previa)
 
 ```
-Bot: "Por favor comparte tu ubicación o escribe la dirección de entrega:"
-[Espera mensaje de ubicación o texto]
+Bot: "📍 Por favor escribe tu dirección de entrega.
+
+Ejemplos:
+• Carrera 45 #12-34, Barrio Centro
+• Manzana 5 Casa 12, Urb. Los Almendros
+• Km 4 vía al Norte"
+```
+
+### Opción 5b: Si es Domicilio (cliente con dirección previa en DB)
+
+```
+Bot: "📍 Tu última dirección de entrega fue:
+Carrera 45 #12-34, Barrio Centro
+
+¿Deseas usarla?
+1️⃣ Sí, usar esta dirección
+2️⃣ No, escribir nueva dirección"
+```
+
+### Opción 5c: Notas de entrega (opcional, tras confirmar dirección)
+
+```
+Bot: "📝 ¿Alguna nota para la entrega?
+
+Por ejemplo: 'Casa verde, timbre roto, llamar al llegar'
+
+_(Escribe tu nota o envía *omitir* para continuar)_"
 ```
 
 ### Opción 6: Método de Pago
@@ -121,13 +146,53 @@ Gracias por preferir Arrocería Shanti 🍚"
 
 ## Flujo: Estado de Pedido
 
-```
-Usuario: "Estado de mi pedido" o envía número de orden
-Bot: "Pedido *#SH-001*
-Estado: 🍳 En preparación
-Tiempo restante: ~15 minutos
+### Un solo pedido activo
 
-Te notificaremos cuando esté listo."
+```
+Usuario: "estado" o "3" desde menú principal
+Bot: "🛵 *Pedido #SH-001*
+
+Estado: ✅ Confirmado
+
+*Productos:*
+• 2x Arroz Chino de Pollo — $36.000
+
+Total: $39.000
+Tipo: Domicilio
+
+Te notificaremos cuando haya actualizaciones. 📲"
+```
+
+### Múltiples pedidos activos (hasta 5)
+
+```
+Bot: "🛵 *Pedido #SH-005* (el más reciente, en detalle)
+...
+
+─────────────────────
+*Otros pedidos activos:*
+🛵 #SH-004 — ✅ Confirmado — $39.000
+🛵 #SH-003 — 🍳 En preparación — $22.000
+📦 #SH-002 — ⏳ Pendiente — $18.000
+📦 #SH-001 — 🎉 Listo para entrega — $25.000"
+```
+
+### Más de 5 pedidos activos (paginación)
+
+```
+Bot: "(detalle del más reciente + 4 compactos)
+
+1️⃣ Ver más (N pedidos más)
+0️⃣ Volver al menú"
+
+Usuario: "1"
+Bot: "📋 *Más pedidos activos (6–9 de 10)*
+
+🛵 #SH-006 — ⏳ Pendiente — $39.000
+...
+
+1️⃣ Ver más
+0️⃣ Volver al menú"
 ```
 
 ## Flujo: Notificaciones del Restaurante

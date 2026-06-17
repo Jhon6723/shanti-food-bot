@@ -1,8 +1,6 @@
 # Problemas Conocidos y Roadmap
 
-## Estado: v1.1 — Flujo robusto
-
-El bot ahora tiene fallbacks en cada paso y valida todas las entradas del usuario.
+## Estado: v1.3 — Pedidos paginados + seguridad documentada
 
 ---
 
@@ -10,54 +8,72 @@ El bot ahora tiene fallbacks en cada paso y valida todas las entradas del usuari
 
 | # | Problema | Fix |
 |---|----------|-----|
-| 1 | Nombre del cliente hardcodeado | Paso `name` + recuperacion de DB para clientes recurrentes |
-| 2 | Personalizaciones limitadas a una | `handleCustomization` parsea numeros separados por coma (`1,3`) |
-| 3 | Sin opcion de "atras" o "cancelar" | Todos los handlers aceptan `0`, `atras` o `volver` |
+| 1 | Nombre del cliente hardcodeado | Paso `name` + recuperación de DB para clientes recurrentes |
+| 2 | Personalizaciones limitadas a una | `handleCustomization` parsea números separados por coma (`1,3`) |
+| 3 | Sin opción de "atras" o "cancelar" | Todos los handlers aceptan `0`, `atras` o `volver` |
 | 4 | Modificar pedido no implementado | `handleModify` con 4 opciones funcionales |
-| 5 | Busqueda de producto por nombre fragil | Lista numerada en `showProductList()`, seleccion por numero |
-| 6 | Input invalido confirma/cambia pedido | Validacion estricta en `delivery_type`, `payment`, `confirm` |
+| 5 | Búsqueda de producto por nombre frágil | Lista numerada en `showProductList()`, selección por número |
+| 6 | Input inválido confirma/cambia pedido | Validación estricta en `delivery_type`, `payment`, `confirm` |
 | 7 | Phone normalization inconsistente | `handleMessage` normaliza `573011758999` → `3011758999`. DB busca los 3 formatos. |
-| 8 | Carrito vacio al hacer "atras" en add_more | Proteccion contra `pop()` en array vacio |
+| 8 | Carrito vacío al hacer "atras" en add_more | Protección contra `pop()` en array vacío |
+
+## ✅ Arreglado en v1.2
+
+| # | Problema | Fix |
+|---|----------|-----|
+| 9 | Dirección no validada (solo longitud) | Regex completo para formatos colombianos — barrio/sector obligatorio en direcciones de calle |
+| 10 | Modificar pedido pedía dirección de nuevo | `handleAddMore` salta `delivery_type` si `session.type` ya está definido |
+| 11 | Dirección del restaurante hardcodeada | Variable de entorno `BUSINESS_ADDRESS` con fallback |
+| 12 | Sin paso de notas de entrega | Nuevo step `delivery_notes` (opcional, se puede omitir) |
+| 13 | Sin reutilización de dirección previa | Consulta a DB al elegir domicilio — step `address_confirm` si hay dirección previa |
+
+## ✅ Arreglado en v1.3
+
+| # | Problema | Fix |
+|---|----------|-----|
+| 14 | Estado de pedido mostraba solo una orden | `findAllPendingByCustomer` + vista detalle + lista compacta paginada |
 
 ---
 
-## 💡 Bajo (Mejoras deseables)
+## 💡 Pendiente
 
-### 6. Sin manejo de ubicacion GPS
-**Problema**: En `handleAddress`, el bot solo acepta texto. No procesa `message.location` de WhatsApp.
-**Impacto**: Usuario no puede compartir ubicacion en vivo para domicilio.
-**Solucion**: En `handleDeliveryType`, preguntar "¿Enviar ubicacion o escribir direccion?" y procesar `type: 'location'`.
+### P1. Sin manejo de ubicación GPS
+**Problema**: `handleAddress` solo acepta texto. No procesa `message.location` de WhatsApp.
+**Impacto**: Usuario no puede compartir ubicación en vivo para domicilio.
+**Solución**: Procesar `type: 'location'` en el webhook y extraer coordenadas.
 
-### 7. Sin plantillas de mensajes aprobados
-**Problema**: Para mensajes iniciados por el negocio (notificaciones de estado), Meta requiere plantillas pre-aprobadas.
-**Impacto**: El bot solo puede responder mensajes entrantes. No puede notificar al cliente cuando el pedido esta listo.
-**Solucion**: Crear plantillas en Meta Business Manager para:
-- "Pedido confirmado"
-- "Pedido listo para entrega"
-- "Pedido en camino"
+### P2. Sin plantillas de mensajes aprobados (Meta)
+**Problema**: Para notificaciones iniciadas por el negocio, Meta requiere plantillas pre-aprobadas.
+**Impacto**: El bot no puede notificar proactivamente al cliente cuando el pedido está listo.
+**Solución**: Crear plantillas en Meta Business Manager. Cubierto parcialmente por el **admin dashboard** (fase siguiente).
 
-### 8. Sesiones en memoria (no persistentes)
+### P3. Sesiones en memoria (no persistentes)
 **Problema**: `sessions = new Map<string, Session>()` se pierde si el servidor reinicia.
-**Impacto**: Usuario que estaba a mitad de pedido pierde progreso.
-**Solucion**: Migrar sesiones a Redis o PostgreSQL.
+**Impacto**: Usuario a mitad de pedido pierde progreso.
+**Solución**: Migrar sesiones a Redis o PostgreSQL.
 
-### 9. Sin validacion de horario de atencion
-**Problema**: El bot acepta pedidos 24/7. No verifica si el restaurante esta abierto.
-**Impacto**: Pedidos a medianoche que nadie va a preparar.
-**Solucion**: Agregar horario de atencion en `.env` y rechazar pedidos fuera de horario.
+### P4. Sin validación de horario de atención
+**Problema**: El bot acepta pedidos 24/7.
+**Impacto**: Pedidos en horario cerrado que nadie va a preparar.
+**Solución**: Variable de entorno `BUSINESS_HOURS` y rechazo fuera de horario.
 
-### 10. Sin confirmacion humana para pedidos complejos
-**Problema**: El auto-confirm (`total < 50000 && items.length <= 3`) funciona, pero pedidos grandes pasan a `pending` y nadie los revisa.
-**Impacto**: Pedidos grandes pueden quedar olvidados sin confirmacion humana.
-**Solucion**: Panel de administracion o notificaciones (email/SMS) para pedidos `pending`.
+### P5. Pedidos grandes sin revisión humana
+**Problema**: Pedidos con `total >= 50000` o más de 3 ítems quedan en `pending` sin que nadie los revise.
+**Impacto**: Pedidos grandes pueden quedar olvidados.
+**Solución**: **Admin dashboard** (fase siguiente) — el administrador verá y gestionará estos pedidos.
+
+### P6. API de órdenes sin autenticación
+**Problema**: Ver `docs/SECURITY.md` — issues #1, #2, #3.
+**Solución**: JWT en fase admin dashboard + verificación HMAC webhook Meta.
 
 ---
 
 ## Roadmap
 
-| Version | Objetivo | Issues |
+| Versión | Objetivo | Issues |
 |---------|----------|--------|
-| v1.1 | Flujo robusto | #1, #3, #4, #5 |
-| v1.2 | UX mejorada | #2, #6, #8 |
-| v1.3 | Admin panel | #7, #10 |
-| v2.0 | Produccion | #9, plantillas, analytics |
+| v1.1 | Flujo robusto | #1–8 ✅ |
+| v1.2 | UX mejorada + validaciones | #9–13 ✅ |
+| v1.3 | Estado paginado | #14 ✅ |
+| v1.4 | **Admin dashboard (en progreso)** | P5, P6 — JWT + CRUD pedidos + estadísticas |
+| v2.0 | Producción | P2, P3, P4 — plantillas Meta, sesiones persistentes, horarios |
