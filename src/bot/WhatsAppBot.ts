@@ -2,14 +2,8 @@
 // Handles conversational flows for order management
 
 import { Order } from '../domain/models/Order.js';
-import {
-  getAvailableProducts,
-  getProductById,
-  getProductByName,
-  getProductsByCategory,
-  type Product,
-} from '../domain/models/Product.js';
 import { orderRepository } from '../infrastructure/repositories/OrderRepository.js';
+import { productRepository, type ProductRow } from '../infrastructure/repositories/ProductRepository.js';
 import type { OrderItemData, OrderType, PaymentMethod } from '../types/index.js';
 
 type BotStep =
@@ -39,7 +33,7 @@ interface SessionState {
   lastAddress: string | null;
   deliveryNotes: string | null;
   paymentMethod: PaymentMethod | null;
-  currentProduct: Product | null;
+  currentProduct: ProductRow | null;
   pendingItem: OrderItemData | null;
   customerName: string | null;
   orderStatusCache: Order[] | null;
@@ -56,7 +50,7 @@ class Session {
   lastAddress: string | null = null;
   deliveryNotes: string | null = null;
   paymentMethod: PaymentMethod | null = null;
-  currentProduct: Product | null = null;
+  currentProduct: ProductRow | null = null;
   pendingItem: OrderItemData | null = null;
   customerName: string | null = null;
   orderStatusCache: Order[] | null = null;
@@ -186,13 +180,13 @@ Responde con el número de la opción.`;
       case '1':
       case 'menu':
         session.step = 'menu';
-        return this.showFullMenu();
+        return await this.showFullMenu();
       case '2':
       case 'pedido':
       case 'ordenar':
         if (session.customerName) {
           session.step = 'product';
-          return `¡Hola *${session.customerName}*! 👋\n\n${this.showProductList()}\n\nResponde con el numero del producto que deseas.`;
+          return `¡Hola *${session.customerName}*! 👋\n\n${await this.showProductList()}\n\nResponde con el numero del producto que deseas.`;
         }
         session.step = 'name';
         return `📝 *Antes de ordenar...*\n\n¿Cual es tu nombre?\n\n(Escribe tu nombre para continuar)`;
@@ -208,42 +202,42 @@ Responde con el número de la opción.`;
     }
   }
 
-  private handleName(text: string, session: Session): string {
+  private async handleName(text: string, session: Session): Promise<string> {
     const name = text.trim();
     if (name.length < 2) {
       return `Por favor escribe tu nombre real (al menos 2 letras).\n\n¿Cual es tu nombre?`;
     }
     session.customerName = name;
     session.step = 'product';
-    return `¡Hola *${name}*! 👋\n\n${this.showProductList()}\n\nResponde con el numero del producto que deseas.`;
+    return `¡Hola *${name}*! 👋\n\n${await this.showProductList()}\n\nResponde con el numero del producto que deseas.`;
   }
 
-  private showFullMenu(): string {
-    const arroces = getProductsByCategory('arroz_chino');
-    const bandejas = getProductsByCategory('bandeja_paisa');
-    const bebidas = getProductsByCategory('bebidas');
+  private async showFullMenu(): Promise<string> {
+    const arroces = await productRepository.findByCategory('arroz_chino', true);
+    const bandejas = await productRepository.findByCategory('bandeja_paisa', true);
+    const bebidas = await productRepository.findByCategory('bebidas', true);
 
     let menu = `*🍚 MENÚ ARROCERÍA SHANTI 🍚*\n\n`;
     menu += `*Arroces Chinos:*\n`;
-    arroces.forEach((p) => { menu += `• ${p.name} - $${p.price.toLocaleString()}\n`; });
+    arroces.forEach((p: ProductRow) => { menu += `• ${p.name} - $${p.price.toLocaleString()}\n`; });
     menu += `\n*Bandejas:*\n`;
-    bandejas.forEach((p) => { menu += `• ${p.name} - $${p.price.toLocaleString()}\n`; });
+    bandejas.forEach((p: ProductRow) => { menu += `• ${p.name} - $${p.price.toLocaleString()}\n`; });
     menu += `\n*Bebidas:*\n`;
-    bebidas.forEach((p) => { menu += `• ${p.name} - $${p.price.toLocaleString()}\n`; });
+    bebidas.forEach((p: ProductRow) => { menu += `• ${p.name} - $${p.price.toLocaleString()}\n`; });
     menu += `\n🛵 Domicilio: $3.000 adicional\n\n📌 Para ordenar, escribe el *nombre* del producto o escribe *pedido* para ver la lista numerada.`;
     return menu;
   }
 
-  private showProductList(): string {
-    const all = getAvailableProducts();
+  private async showProductList(): Promise<string> {
+    const all = await productRepository.findAll(false);
     let list = `*📋 MENÚ — Selecciona un número:*\n\n`;
-    all.forEach((p, i) => {
+    all.forEach((p: ProductRow, i: number) => {
       list += `${i + 1}. ${p.name} — $${p.price.toLocaleString()}\n`;
     });
     return list;
   }
 
-  private handleProductSelection(text: string, session: Session): string {
+  private async handleProductSelection(text: string, session: Session): Promise<string> {
     if (text === '0' || text === 'atras' || text === 'volver') {
       if (session.step === 'menu') {
         session.step = null;
@@ -257,38 +251,40 @@ Responde con el número de la opción.`;
       return `📝 ¿Cual es tu nombre?\n\n(Escribe tu nombre o "hola" para reiniciar)`;
     }
 
-    const all = getAvailableProducts();
+    const all = await productRepository.findAll(false);
     const idx = parseInt(text) - 1;
-    let product: Product | undefined;
+    let product: ProductRow | undefined;
 
     if (!isNaN(idx) && idx >= 0 && idx < all.length) {
       product = all[idx];
     } else {
-      product = getProductByName(text);
+      const found = await productRepository.findAll(false);
+      product = found.find((p: ProductRow) => p.name.toLowerCase().includes(text) || p.id === text);
     }
 
     if (!product) {
-      return `❌ No encontré ese producto.\n\n${this.showProductList()}\n\nResponde con el *número* del producto.`;
+      return `❌ No encontré ese producto.\n\n${await this.showProductList()}\n\nResponde con el *número* del producto.`;
     }
     if (!product.available) {
-      return `Lo sentimos, ${product.name} no está disponible en este momento.\n\n${this.showProductList()}`;
+      return `Lo sentimos, ${product.name} no está disponible en este momento.\n\n${await this.showProductList()}`;
     }
 
     session.currentProduct = product;
     session.step = 'customization';
 
     let msg = `*${product.name}* — $${product.price.toLocaleString()}\n\n`;
-    if (product.customizationOptions.length > 0) {
+    const opts = product.customization_options ?? [];
+    if (opts.length > 0) {
       msg += `¿Alguna personalización? (puedes elegir varias)\n`;
-      product.customizationOptions.forEach((opt, i) => { msg += `${i + 1}. ${opt}\n`; });
-      msg += `${product.customizationOptions.length + 1}. Ninguna\n\nResponde con números separados por coma (ej: *1,3*) o escribe tu preferencia.`;
+      opts.forEach((opt: string, i: number) => { msg += `${i + 1}. ${opt}\n`; });
+      msg += `${opts.length + 1}. Ninguna\n\nResponde con números separados por coma (ej: *1,3*) o escribe tu preferencia.`;
     } else {
       session.pendingItem = {
         productId: product.id,
         quantity: 0,
         customizations: [],
         unitPrice: product.price,
-        preparationMinutes: product.preparationMinutes,
+        preparationMinutes: product.preparation_minutes,
       };
       session.step = 'quantity';
       msg += `¿Cuántas ${this.quantityLabel(session)} deseas?\n\n_(Escribe *0* o *volver* para regresar)_`;
@@ -296,13 +292,13 @@ Responde con el número de la opción.`;
     return msg;
   }
 
-  private handleCustomization(text: string, session: Session): string {
+  private async handleCustomization(text: string, session: Session): Promise<string> {
     if (text === '0' || text === 'atras' || text === 'volver') {
       session.step = 'product';
-      return `${this.showProductList()}\n\nResponde con el número del producto.\n\n_(Escribe *0* o *volver* para regresar)_`;
+      return `${await this.showProductList()}\n\nResponde con el número del producto.\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
 
-    const options = session.currentProduct!.customizationOptions;
+    const options = session.currentProduct!.customization_options ?? [];
     const ningunaIdx = options.length + 1; // e.g. option 3 = Ninguna
 
     // Parse comma-separated numbers (e.g. "1,3") or single number
@@ -324,7 +320,7 @@ Responde con el número de la opción.`;
     // If user typed numbers but none were valid, warn them
     if (nums.length > 0 && validNums.length === 0 && !hasNinguna) {
       let msg = `❌ No reconocí ninguna opción válida.\n\n¿Alguna personalización?\n`;
-      options.forEach((opt, i) => { msg += `${i + 1}. ${opt}\n`; });
+      options.forEach((opt: string, i: number) => { msg += `${i + 1}. ${opt}\n`; });
       msg += `${options.length + 1}. Ninguna\n\nResponde con números separados por coma.`;
       return msg;
     }
@@ -334,31 +330,31 @@ Responde con el número de la opción.`;
       quantity: 0,
       customizations,
       unitPrice: session.currentProduct!.price,
-      preparationMinutes: session.currentProduct!.preparationMinutes,
+      preparationMinutes: session.currentProduct!.preparation_minutes,
     };
     session.step = 'quantity';
     return `¿Cuántas ${this.quantityLabel(session)} de *${session.currentProduct!.name}* deseas?\n\n_(Escribe *0* o *volver* para regresar)_`;
   }
 
   private quantityLabel(session: Session): string {
-    return session.currentProduct?.category === 'bebidas' ? 'unidades' : 'porciones';
+    return session.currentProduct?.category_id === 'bebidas' ? 'unidades' : 'porciones';
   }
 
-  private handleQuantity(text: string, session: Session): string {
+  private async handleQuantity(text: string, session: Session): Promise<string> {
     if (text === '0' || text === 'atras' || text === 'volver') {
       session.step = 'customization';
-      const opts = session.currentProduct!.customizationOptions;
+      const opts = session.currentProduct!.customization_options ?? [];
       let msg = '';
       if (session.items.length > 0) {
         msg += `🛒 *Carrito actual:*\n`;
         for (const item of session.items) {
-          const p = getProductById(item.productId);
+          const p = await productRepository.findById(item.productId);
           msg += `• ${item.quantity}x ${p?.name ?? item.productId} — $${((item.unitPrice ?? 0) * item.quantity).toLocaleString()}\n`;
         }
         msg += `\n`;
       }
       msg += `¿Alguna personalización? (puedes elegir varias)\n`;
-      opts.forEach((opt, i) => { msg += `${i + 1}. ${opt}\n`; });
+      opts.forEach((opt: string, i: number) => { msg += `${i + 1}. ${opt}\n`; });
       msg += `${opts.length + 1}. Ninguna\n\nResponde con números separados por coma.`;
       return msg;
     }
@@ -381,15 +377,15 @@ Responde con el número de la opción.`;
     return `✅ Agregado: ${quantity}x ${session.currentProduct!.name} = $${itemTotal.toLocaleString()}\n\n*Total hasta ahora: $${session.subtotal.toLocaleString()}*\n\n¿Deseas agregar algo más?\n\n1️⃣ Sí, ver menú\n2️⃣ No, finalizar pedido`;
   }
 
-  private handleAddMore(text: string, session: Session): string {
+  private async handleAddMore(text: string, session: Session): Promise<string> {
     if (text === '0' || text === 'atras' || text === 'volver') {
       if (session.items.length === 0) {
         session.step = 'product';
-        return `${this.showProductList()}\n\nTu carrito está vacío. Responde con el número del producto.\n\n_(Escribe *0* o *volver* para regresar)_`;
+        return `${await this.showProductList()}\n\nTu carrito está vacío. Responde con el número del producto.\n\n_(Escribe *0* o *volver* para regresar)_`;
       }
       const removed = session.items.pop()!;
       session.subtotal -= removed.unitPrice! * removed.quantity;
-      session.currentProduct = getProductById(removed.productId) ?? null;
+      session.currentProduct = await productRepository.findById(removed.productId) ?? null;
       session.pendingItem = { ...removed, quantity: 0 };
       session.step = 'quantity';
       return `Producto eliminado del carrito.\n\n¿Cuántas porciones de *${session.currentProduct?.name ?? 'este producto'}* deseas?\n\n_(Escribe *0* o *volver* para regresar)_`;
@@ -399,13 +395,13 @@ Responde con el número de la opción.`;
       session.currentProduct = null;
       session.pendingItem = null;
       session.step = 'product';
-      return `${this.showProductList()}\n\nResponde con el número del producto.\n\n_(Escribe *0* o *volver* para regresar)_`;
+      return `${await this.showProductList()}\n\nResponde con el número del producto.\n\n_(Escribe *0* o *volver* para regresar)_`;
     }
     if (text === '2' || text === 'no' || text === 'finalizar') {
       if (session.type) {
         session.total = session.subtotal + (session.type === 'delivery' ? this.deliveryFee : 0);
         session.step = 'confirm';
-        return this.showOrderSummary(session);
+        return await this.showOrderSummary(session);
       }
       session.step = 'delivery_type';
       return `Perfecto. *Total de productos: $${session.subtotal.toLocaleString()}*\n\n¿Cómo deseas recibir tu pedido?\n\n1️⃣ 🛵 Domicilio (+$3.000)\n2️⃣ 🏪 Recoger en restaurante\n\n_(Escribe *0* o *volver* para regresar)_`;
@@ -440,7 +436,7 @@ Responde con el número de la opción.`;
     return `Opción no reconocida.\n\n¿Cómo deseas recibir tu pedido?\n\n1️⃣ 🛵 Domicilio (+$3.000)\n2️⃣ 🏪 Recoger en restaurante\n\n_(Escribe *0* o *volver* para regresar)_`;
   }
 
-  private handleAddressConfirm(text: string, session: Session): string {
+  private async handleAddressConfirm(text: string, session: Session): Promise<string> {
     if (text === '0' || text === 'atras' || text === 'volver') {
       session.step = 'delivery_type';
       return `¿Cómo deseas recibir tu pedido?\n\n1️⃣ 🛵 Domicilio (+$3.000)\n2️⃣ 🏪 Recoger en restaurante\n\n_(Escribe *0* o *volver* para regresar)_`;
@@ -500,7 +496,7 @@ Responde con el número de la opción.`;
     return `📝 Nota guardada.\n\n¿Método de pago?\n\n1️⃣ 💵 Efectivo (contra entrega)\n2️⃣ 📱 Nequi (transferencia)\n\n_(Escribe *0* o *volver* para regresar)_`;
   }
 
-  private handlePayment(text: string, session: Session): string {
+  private async handlePayment(text: string, session: Session): Promise<string> {
     if (text === '0' || text === 'atras' || text === 'volver') {
       if (session.type === 'delivery') {
         session.step = 'address';
@@ -514,27 +510,28 @@ Responde con el número de la opción.`;
     if (text === '1' || text.includes('efectivo') || text.includes('cash')) {
       session.paymentMethod = 'cash';
       session.step = 'confirm';
-      return this.showOrderSummary(session);
+      return await this.showOrderSummary(session);
     }
     if (text === '2' || text.includes('nequi') || text.includes('transferencia')) {
       session.paymentMethod = 'nequi';
       session.step = 'confirm';
-      return this.showOrderSummary(session);
+      return await this.showOrderSummary(session);
     }
     return `Opción no reconocida.\n\n¿Método de pago?\n\n1️⃣ 💵 Efectivo\n2️⃣ 📱 Nequi (transferencia)\n\n_(Escribe *0* o *volver* para regresar)_`;
   }
 
-  private showOrderSummary(session: Session): string {
+  private async showOrderSummary(session: Session): Promise<string> {
     let summary = `*📋 RESUMEN DE TU PEDIDO 📋*\n\n`;
-    session.items.forEach((item, i) => {
-      const product = getProductById(item.productId)!;
+    for (const [i, item] of session.items.entries()) {
+      const product = await productRepository.findById(item.productId);
+      if (!product) continue;
       const itemTotal = item.unitPrice! * item.quantity;
       summary += `${i + 1}. ${product.name}\n   ${item.quantity}x $${item.unitPrice!.toLocaleString()} = $${itemTotal.toLocaleString()}\n`;
       if ((item.customizations ?? []).length > 0) {
         summary += `   (${(item.customizations ?? []).join(', ')})\n`;
       }
       summary += `\n`;
-    });
+    }
     summary += `*Subtotal:* $${session.subtotal.toLocaleString()}\n`;
     if (session.type === 'delivery') summary += `*Domicilio:* $3.000\n`;
     summary += `\n💰 *TOTAL: $${session.total.toLocaleString()}*\n\n`;
@@ -545,11 +542,11 @@ Responde con el número de la opción.`;
     return summary;
   }
 
-  private handleModify(text: string, session: Session): string {
+  private async handleModify(text: string, session: Session): Promise<string> {
     switch (text) {
       case '1':
         session.step = 'product';
-        return `${this.showProductList()}\n\nResponde con el número del producto que deseas agregar.`;
+        return `${await this.showProductList()}\n\nResponde con el número del producto que deseas agregar.`;
       case '2':
         if (session.type === 'delivery') {
           session.step = 'address';
@@ -579,7 +576,7 @@ Responde con el número de la opción.`;
       return `¿Qué deseas modificar?\n\n1️⃣ Agregar más productos\n2️⃣ Cambiar dirección\n3️⃣ Cambiar método de pago\n4️⃣ Cancelar pedido\n\nResponde con el número.`;
     }
     if (!(text === '1' || text === 'si' || text === 'sí' || text === 'confirmar' || text === 'ok')) {
-      return `Opción no reconocida.\n\n${this.showOrderSummary(session)}`;
+      return `Opción no reconocida.\n\n${await this.showOrderSummary(session)}`;
     }
 
     const orderData = {
@@ -619,7 +616,7 @@ Responde con el número de la opción.`;
     preparing: 'En preparación', ready: 'Listo para entrega', delivered: 'Entregado',
   };
 
-  private formatOrderDetail(order: Order): string {
+  private async formatOrderDetail(order: Order): Promise<string> {
     const headerEmoji = order.type === 'delivery' ? '🛵' : '📦';
     let msg = `${headerEmoji} *Pedido #${order.id}*\n\n`;
     msg += `Estado: ${this.statusEmojis[order.status]} ${this.statusLabels[order.status]}\n`;
@@ -630,7 +627,7 @@ Responde con el número de la opción.`;
     }
     msg += `\n*Productos:*\n`;
     for (const item of order.items) {
-      const product = getProductById(item.productId);
+      const product = await productRepository.findById(item.productId);
       const name = product?.name ?? item.productId;
       msg += `• ${item.quantity}x ${name} — $${(item.unitPrice * item.quantity).toLocaleString()}\n`;
       if (item.customizations.length > 0) msg += `  _(${item.customizations.join(', ')})_\n`;
@@ -668,7 +665,7 @@ Responde con el número de la opción.`;
     session.orderStatusCache = orders;
     session.orderStatusPage = 0;
 
-    let msg = this.formatOrderDetail(orders[0]);
+    let msg = await this.formatOrderDetail(orders[0]);
     msg += `\n\nTe notificaremos cuando haya actualizaciones. 📲`;
 
     if (orders.length > 1) {

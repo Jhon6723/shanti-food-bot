@@ -3,6 +3,31 @@ import { WhatsAppBot } from '../../src/bot/WhatsAppBot.js';
 import { Order } from '../../src/domain/models/Order.js';
 import type { OrderRepository } from '../../src/infrastructure/repositories/OrderRepository.js';
 
+// Mock ProductRepository to avoid DB calls
+vi.mock('../../src/infrastructure/repositories/ProductRepository.js', () => {
+  const mockProducts = [
+    { id: 'arroz-pollo', name: 'Arroz Chino de Pollo', category_id: 'arroz_chino', price: 18000, description: 'Arroz salteado con pollo', available: true, preparation_minutes: 20, customization_options: ['sin cebolla', 'sin pollo', 'extra picante'], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'arroz-cerdo', name: 'Arroz Chino de Cerdo', category_id: 'arroz_chino', price: 17000, description: 'Arroz salteado con cerdo', available: true, preparation_minutes: 20, customization_options: ['sin cebolla', 'sin cerdo'], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'arroz-camaron', name: 'Arroz Chino de Camarón', category_id: 'arroz_chino', price: 20000, description: 'Arroz salteado con camarón', available: true, preparation_minutes: 25, customization_options: ['sin cebolla'], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'arroz-mixto', name: 'Arroz Chino Mixto', category_id: 'arroz_chino', price: 19000, description: 'Arroz salteado mixto', available: true, preparation_minutes: 25, customization_options: ['sin cebolla'], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'arroz-vegetariano', name: 'Arroz Chino Vegetariano', category_id: 'arroz_chino', price: 16000, description: 'Arroz salteado vegetariano', available: true, preparation_minutes: 20, customization_options: ['sin cebolla', 'extra tofu'], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'arroz-pollo-pierna', name: 'Arroz Chino de Pollo (Pierna)', category_id: 'arroz_chino', price: 17500, description: 'Arroz salteado con pierna de pollo', available: true, preparation_minutes: 20, customization_options: ['sin cebolla'], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'coca-400', name: 'Coca-Cola 400ml', category_id: 'bebidas', price: 4000, description: 'Gaseosa', available: true, preparation_minutes: 0, customization_options: [], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'sprite-400', name: 'Sprite 400ml', category_id: 'bebidas', price: 4000, description: 'Gaseosa lima-limón', available: true, preparation_minutes: 0, customization_options: [], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'agua-500', name: 'Agua 500ml', category_id: 'bebidas', price: 3000, description: 'Agua natural', available: true, preparation_minutes: 0, customization_options: [], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'bandeja-paisa', name: 'Bandeja Paisa', category_id: 'bandeja_paisa', price: 22000, description: 'Bandeja paisa tradicional', available: true, preparation_minutes: 30, customization_options: ['sin huevo', 'sin chorizo', 'sin chicharrón'], created_at: '2024-01-01', updated_at: '2024-01-01' },
+  ];
+  const mockRepo = {
+    findAll: vi.fn().mockResolvedValue(mockProducts),
+    findById: vi.fn().mockImplementation((id: string) => Promise.resolve(mockProducts.find((p) => p.id === id))),
+    findByCategory: vi.fn().mockImplementation((categoryId: string) => Promise.resolve(mockProducts.filter((p) => p.category_id === categoryId))),
+    create: vi.fn().mockResolvedValue(mockProducts[0]),
+    update: vi.fn().mockResolvedValue(mockProducts[0]),
+    delete: vi.fn().mockResolvedValue(undefined),
+  };
+  return { productRepository: mockRepo, ProductRepository: vi.fn(() => mockRepo) };
+});
+
 // Minimal mock repository — no DB involved
 function makeRepo(overrides: Partial<OrderRepository> = {}): OrderRepository {
   return {
@@ -619,8 +644,7 @@ describe('WhatsAppBot — last address reuse', () => {
     await bot.handleMessage(PHONE, msg('hola'));
     await bot.handleMessage(PHONE, msg('2'));
     await bot.handleMessage(PHONE, msg('Carlos'));
-    await bot.handleMessage(PHONE, msg('1'));  // producto
-    await bot.handleMessage(PHONE, msg('4'));  // Ninguna
+    await bot.handleMessage(PHONE, msg('7'));  // Coca-Cola (no customizations)
     await bot.handleMessage(PHONE, msg('1'));  // cantidad
     await bot.handleMessage(PHONE, msg('2'));  // finalizar
     return bot.handleMessage(PHONE, msg('1')); // Domicilio
@@ -666,6 +690,7 @@ describe('WhatsAppBot — last address reuse', () => {
     const res = await bot.handleMessage(PHONE, msg('2')); // escribir nueva
     expect(res).toContain('dirección');
     expect(res).not.toContain('anterior');
+    expect(res).not.toContain('Coca-Cola');
   });
 });
 
