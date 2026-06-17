@@ -58,13 +58,15 @@ export interface DashboardStats {
 }
 
 export interface DriverStats {
-  totalDeliveries: number;
-  last30Days: number;
+  user: { id: number; name: string; username: string };
+  totalDelivered: number;
+  deliveredLast30Days: number;
   totalAmount: number;
-  recentDeliveries: Array<{
-    orderId: string;
-    amount: number;
-    date: string;
+  recentOrders: Array<{
+    id: string;
+    total: number;
+    created_at: string;
+    customer_name: string;
   }>;
 }
 

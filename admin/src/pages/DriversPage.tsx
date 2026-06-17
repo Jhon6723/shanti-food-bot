@@ -1,9 +1,10 @@
-import { useState } from 'react';
-import { Plus, ChevronRight } from 'lucide-react';
 import * as Switch from '@radix-ui/react-switch';
-import { useDrivers, useCreateDriver, useUpdateDriver } from '../hooks/useDrivers';
-import { User, ToastState } from '../lib/types';
+import { ChevronRight, Plus } from 'lucide-react';
+import { useState } from 'react';
 import { SkeletonCard } from '../components/SkeletonLoader';
+import { useCreateDriver, useDrivers, useUpdateDriver } from '../hooks/useDrivers';
+import { ToastState, User } from '../lib/types';
+import { DriverStatsPage } from './DriverStatsPage';
 
 interface CreatePayload {
   name: string;
@@ -22,6 +23,7 @@ export function DriversPage({ onToast }: Props) {
   const updateDriver = useUpdateDriver();
   const [showModal, setShowModal] = useState(false);
   const [editingDriver, setEditingDriver] = useState<User | null>(null);
+  const [selectedDriver, setSelectedDriver] = useState<User | null>(null);
 
   const handleSave = async (data: CreatePayload) => {
     try {
@@ -81,10 +83,19 @@ export function DriversPage({ onToast }: Props) {
               driver={driver}
               onToggleActive={(active) => handleToggleActive(driver, active)}
               onEdit={() => { setEditingDriver(driver); setShowModal(true); }}
+              onViewStats={() => setSelectedDriver(driver)}
             />
           ))
         )}
       </div>
+
+      {selectedDriver && (
+        <DriverStatsPage
+          driverId={selectedDriver.id}
+          driverName={selectedDriver.name}
+          onBack={() => setSelectedDriver(null)}
+        />
+      )}
 
       {showModal && (
         <DriverFormModal
@@ -101,15 +112,20 @@ function DriverCard({
   driver,
   onToggleActive,
   onEdit,
+  onViewStats,
 }: {
   driver: User;
   onToggleActive: (active: boolean) => void;
   onEdit: () => void;
+  onViewStats: () => void;
 }) {
   const initials = driver.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
 
   return (
-    <div className="bg-white rounded-2xl p-4 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+    <div
+      onClick={onViewStats}
+      className="bg-white rounded-2xl p-4 shadow-[0_2px_8px_rgba(0,0,0,0.06)] active:scale-[0.98] transition-transform cursor-pointer"
+    >
       <div className="flex items-center gap-3">
         <div className="w-11 h-11 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
           <span className="text-emerald-700 text-sm font-medium">{initials}</span>
@@ -129,7 +145,7 @@ function DriverCard({
         <ChevronRight size={16} className="text-slate-300 shrink-0" />
       </div>
       <button
-        onClick={onEdit}
+        onClick={(e) => { e.stopPropagation(); onEdit(); }}
         className="w-full mt-3 py-2 text-center text-slate-400 text-xs rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors"
       >
         Editar datos
