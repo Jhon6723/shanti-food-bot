@@ -40,6 +40,9 @@ coverage/
 
 # Misc
 *.local
+
+# HTTP client files (may contain tokens/passwords)
+specs/api.http
 .cache/
 temp/
 tmp/
