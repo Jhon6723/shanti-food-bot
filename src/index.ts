@@ -5,8 +5,11 @@ import dotenv from 'dotenv';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { initDatabase, pool } from './infrastructure/database/connection.js';
 
+import { requireJWT } from './api/middleware/auth.js';
+import authRouter from './api/routes/auth.js';
 import ordersRouter from './api/routes/orders.js';
 import productsRouter from './api/routes/products.js';
+import usersRouter from './api/routes/users.js';
 import webhookRouter from './api/routes/webhook.js';
 
 dotenv.config();
@@ -34,8 +37,10 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 // API Routes per OpenAPI spec
-app.use('/api/v1/orders', ordersRouter);
+app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/orders', requireJWT, ordersRouter);
 app.use('/api/v1/products', productsRouter);
+app.use('/api/v1/users', usersRouter);
 app.use('/api/v1/webhooks', webhookRouter);
 
 // Root redirect to API
@@ -46,10 +51,14 @@ app.get('/', (_req: Request, res: Response) => {
     description: 'WhatsApp Bot for Arrocería Shanti',
     endpoints: {
       health: '/health',
+      login: '/api/v1/auth/login',
       orders: '/api/v1/orders',
       products: '/api/v1/products',
+      users: '/api/v1/users',
       webhook: '/api/v1/webhooks/whatsapp',
-      botTest: '/api/v1/webhooks/test?phone=XXX&message=hola',
+      ...(process.env.NODE_ENV !== 'production' && {
+        botTest: '/api/v1/webhooks/test?phone=XXX&message=hola',
+      }),
     },
     specs: 'See specs/openapi.yaml for full API specification',
   });
@@ -81,6 +90,7 @@ async function startServer() {
   }
 
   app.listen(PORT, () => {
+    const isDev = process.env.NODE_ENV !== 'production';
     console.log(`
 🍚 Arrocería Shanti API running on port ${PORT}
 
@@ -89,14 +99,14 @@ API Endpoints:
   • GET  /api/v1/products          - Menu products
   • POST /api/v1/orders            - Create order
   • GET  /api/v1/orders            - List orders
-  • POST /api/v1/webhooks/whatsapp - WhatsApp webhook
-  • GET  /api/v1/webhooks/test     - Test bot (query: phone, message)
+  • POST /api/v1/webhooks/whatsapp - WhatsApp webhook${isDev ? `
+  • GET  /api/v1/webhooks/test     - Test bot (dev only)` : ''}
 
 Docker:
   docker-compose up -d
-
+${isDev ? `
 Bot Test:
-  curl "http://localhost:${PORT}/api/v1/webhooks/test?phone=3123456789&message=hola"
+  curl "http://localhost:${PORT}/api/v1/webhooks/test?phone=3123456789&message=hola"` : ''}
 `);
   });
 }
