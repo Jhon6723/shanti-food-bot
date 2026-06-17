@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
+    "build:all": "npm run build --prefix admin && tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "validate-specs": "swagger-cli validate specs/openapi.yaml",
