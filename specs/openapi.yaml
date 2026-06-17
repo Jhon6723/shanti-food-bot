@@ -1,17 +1,152 @@
 openapi: 3.1.0
 info:
   title: Shanti Food API
-  version: 1.0.0
+  version: 1.3.0
   description: API para gestión de pedidos de arrocería vía WhatsApp
 
 servers:
   - url: http://localhost:3000/api/v1
     description: Local development
 
+security: []
+
 paths:
+  /auth/login:
+    post:
+      summary: Login del administrador (obtener JWT)
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Token JWT generado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  role:
+                    type: string
+                    enum: [admin, delivery]
+        '401':
+          description: Credenciales inválidas
+
+  /users:
+    get:
+      summary: Listar usuarios (admin— filtra por rol)
+      tags: [Users]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [admin, delivery]
+      responses:
+        '200':
+          description: Lista de usuarios
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '401':
+          description: Token requerido
+
+    post:
+      summary: Crear usuario (admin o repartidor)
+      tags: [Users]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+      responses:
+        '201':
+          description: Usuario creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '409':
+          description: Username ya existe
+
+  /users/{userId}:
+    patch:
+      summary: Editar usuario (nombre, contraseña, estado activo)
+      tags: [Users]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                password:
+                  type: string
+                  description: Dejar vacío para no cambiar
+                active:
+                  type: boolean
+      responses:
+        '200':
+          description: Usuario actualizado
+        '404':
+          description: Usuario no encontrado
+
+  /users/{userId}/stats:
+    get:
+      summary: Estadísticas de entregas de un repartidor
+      tags: [Users]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Stats del repartidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverStats'
+        '404':
+          description: Usuario no encontrado
+
   /orders:
     post:
       summary: Crear nuevo pedido
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -32,6 +167,8 @@ paths:
 
     get:
       summary: Listar pedidos
+      security:
+        - BearerAuth: []
       parameters:
         - name: status
           in: query
@@ -53,9 +190,46 @@ paths:
                 items:
                   $ref: '#/components/schemas/Order'
 
+  /orders/{orderId}/delivery-proof:
+    post:
+      summary: Subir foto de evidencia de entrega
+      tags: [Orders]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                photo:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Foto subida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  delivery_proof_url:
+                    type: string
+        '404':
+          description: Pedido no encontrado
+
   /orders/{orderId}:
     get:
       summary: Obtener pedido por ID
+      security:
+        - BearerAuth: []
       parameters:
         - name: orderId
           in: path
@@ -74,6 +248,8 @@ paths:
 
     patch:
       summary: Actualizar estado del pedido
+      security:
+        - BearerAuth: []
       parameters:
         - name: orderId
           in: path
@@ -123,6 +299,13 @@ paths:
           description: Mensaje procesado
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT obtenido desde POST /auth/login
+
   schemas:
     OrderRequest:
       type: object
@@ -175,6 +358,12 @@ components:
           type: string
         notes:
           type: string
+        deliveryProofUrl:
+          type: string
+          description: URL de foto de evidencia de entrega
+        deliveredBy:
+          type: integer
+          description: ID del usuario (repartidor) que entregó el pedido
         createdAt:
           type: string
           format: date-time
@@ -227,6 +416,55 @@ components:
           type: boolean
         preparationMinutes:
           type: integer
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        username:
+          type: string
+        role:
+          type: string
+          enum: [admin, delivery]
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    UserRequest:
+      type: object
+      required: [name, username, password, role]
+      properties:
+        name:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          enum: [admin, delivery]
+
+    DriverStats:
+      type: object
+      properties:
+        userId:
+          type: integer
+        name:
+          type: string
+        totalDelivered:
+          type: integer
+          description: Total de pedidos entregados
+        totalAmount:
+          type: number
+          description: Suma del total de pedidos entregados
+        last30Days:
+          type: integer
+          description: Pedidos entregados en los últimos 30 días
 
     WhatsAppWebhook:
       type: object
