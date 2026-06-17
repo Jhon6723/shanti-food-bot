@@ -80,10 +80,25 @@ CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_orders_delivered_by ON orders(delivered_by);
 `;
 
-// ALTER TABLE for existing databases that were created before users table existed
-const MIGRATIONS_SQL = `
+// Migration step 1: ensure users table exists (needed before orders FK)
+const MIGRATION_USERS_SQL = `
+CREATE TABLE IF NOT EXISTS users (
+    id            SERIAL PRIMARY KEY,
+    name          VARCHAR(100) NOT NULL,
+    username      VARCHAR(50) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    role          VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'delivery')),
+    active        BOOLEAN NOT NULL DEFAULT true,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+`;
+
+// Migration step 2: add new columns to orders (depends on users existing)
+const MIGRATION_ORDERS_SQL = `
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_proof_url TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_orders_delivered_by ON orders(delivered_by);
 `;
 
 async function seedAdminUser(): Promise<void> {
@@ -107,6 +122,7 @@ async function seedAdminUser(): Promise<void> {
 
 export async function initDatabase(): Promise<void> {
   await pool.query(SCHEMA_SQL);
-  await pool.query(MIGRATIONS_SQL);
+  await pool.query(MIGRATION_USERS_SQL);
+  await pool.query(MIGRATION_ORDERS_SQL);
   await seedAdminUser();
 }
