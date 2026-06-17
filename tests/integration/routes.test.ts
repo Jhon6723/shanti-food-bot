@@ -43,6 +43,41 @@ vi.mock('../../src/infrastructure/whatsapp/WhatsAppSender.js', () => ({
   sendWhatsAppMessage: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Mock ProductRepository to avoid DB calls
+vi.mock('../../src/infrastructure/repositories/ProductRepository.js', () => {
+  const mockProducts = [
+    { id: 'arroz-pollo', name: 'Arroz Chino de Pollo', category_id: 'arroz_chino', price: 18000, description: 'Arroz salteado con pollo', available: true, preparation_minutes: 20, customization_options: ['sin cebolla'], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'coca-400', name: 'Coca-Cola 400ml', category_id: 'bebidas', price: 4000, description: 'Gaseosa', available: true, preparation_minutes: 0, customization_options: [], created_at: '2024-01-01', updated_at: '2024-01-01' },
+  ];
+  const mockRepo = {
+    findAll: vi.fn().mockResolvedValue(mockProducts),
+    findById: vi.fn().mockImplementation((id: string) => Promise.resolve(mockProducts.find((p) => p.id === id))),
+    findByCategory: vi.fn().mockImplementation((categoryId: string) => Promise.resolve(mockProducts.filter((p) => p.category_id === categoryId))),
+    create: vi.fn().mockResolvedValue(mockProducts[0]),
+    update: vi.fn().mockResolvedValue(mockProducts[0]),
+    delete: vi.fn().mockResolvedValue(undefined),
+  };
+  return { productRepository: mockRepo, ProductRepository: vi.fn(() => mockRepo) };
+});
+
+// Mock CategoryRepository to avoid DB calls
+vi.mock('../../src/infrastructure/repositories/CategoryRepository.js', () => {
+  const mockCategories = [
+    { id: 'arroz_chino', name: 'Arroces Chinos', sort_order: 1, created_at: '2024-01-01' },
+    { id: 'bandeja_paisa', name: 'Bandejas', sort_order: 2, created_at: '2024-01-01' },
+    { id: 'bebidas', name: 'Bebidas', sort_order: 3, created_at: '2024-01-01' },
+  ];
+  const mockRepo = {
+    findAll: vi.fn().mockResolvedValue(mockCategories),
+    findById: vi.fn().mockImplementation((id: string) => Promise.resolve(mockCategories.find((c) => c.id === id))),
+    create: vi.fn().mockResolvedValue(mockCategories[0]),
+    update: vi.fn().mockResolvedValue(mockCategories[0]),
+    delete: vi.fn().mockResolvedValue(undefined),
+    hasProducts: vi.fn().mockResolvedValue(false),
+  };
+  return { categoryRepository: mockRepo, CategoryRepository: vi.fn(() => mockRepo) };
+});
+
 let mockRepo: typeof OrderRepoType & {
   findAll: ReturnType<typeof vi.fn>;
   findById: ReturnType<typeof vi.fn>;
@@ -70,7 +105,7 @@ describe('GET /api/v1/products', () => {
     const res = await request(app).get('/api/v1/products?category=bebidas');
     expect(res.status).toBe(200);
     for (const p of res.body) {
-      expect(p.category).toBe('bebidas');
+      expect(p.category_id).toBe('bebidas');
     }
   });
 
@@ -102,8 +137,8 @@ describe('GET /api/v1/products/menu/whatsapp', () => {
   it('returns structured menu', async () => {
     const res = await request(app).get('/api/v1/products/menu/whatsapp');
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('arroces_chinos');
-    expect(res.body).toHaveProperty('bandejas');
+    expect(res.body).toHaveProperty('arroz_chino');
+    expect(res.body).toHaveProperty('bandeja_paisa');
     expect(res.body).toHaveProperty('bebidas');
   });
 });
