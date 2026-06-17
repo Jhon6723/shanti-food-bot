@@ -9,6 +9,7 @@ import type { AdminScreen, ToastState } from './lib/types';
 import { DeliveryPage } from './pages/DeliveryPage';
 import { DriversPage } from './pages/DriversPage';
 import { LoginPage } from './pages/LoginPage';
+import { MenuPage } from './pages/MenuPage';
 import { OrdersPage } from './pages/OrdersPage';
 import { StatsPage } from './pages/StatsPage';
 
@@ -51,6 +52,7 @@ function AdminShell() {
       {screen === 'orders' && <OrdersPage onToast={showToast} onLogout={handleLogout} />}
       {screen === 'stats' && <StatsPage onLogout={handleLogout} />}
       {screen === 'drivers' && <DriversPage onToast={showToast} />}
+      {screen === 'menu' && <MenuPage onToast={showToast} onLogout={handleLogout} />}
       <BottomNav currentScreen={screen} onNavigate={(s: AdminScreen) => setScreen(s)} pendingCount={pendingCount} />
       <Toast toast={toast} />
     </>

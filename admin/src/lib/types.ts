@@ -2,7 +2,27 @@ export type UserRole = 'admin' | 'delivery';
 export type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
 export type OrderType = 'delivery' | 'pickup';
 export type PaymentMethod = 'cash' | 'nequi';
-export type AdminScreen = 'orders' | 'stats' | 'drivers';
+export type AdminScreen = 'orders' | 'stats' | 'drivers' | 'menu';
+
+export interface Category {
+  id: string;
+  name: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  categoryId: string;
+  price: number;
+  description?: string | null;
+  available: boolean;
+  preparationMinutes: number;
+  customizationOptions: string[];
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface OrderItem {
   productId: string;

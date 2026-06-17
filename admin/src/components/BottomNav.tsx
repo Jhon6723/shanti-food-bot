@@ -1,4 +1,4 @@
-import { ClipboardList, BarChart2, Users } from 'lucide-react';
+import { BarChart2, BookOpen, ClipboardList, Users } from 'lucide-react';
 import type { AdminScreen } from '../lib/types';
 
 interface Props {
@@ -12,6 +12,7 @@ export function BottomNav({ currentScreen, onNavigate, pendingCount }: Props) {
     { id: 'orders' as AdminScreen, icon: ClipboardList, label: 'Pedidos' },
     { id: 'stats' as AdminScreen, icon: BarChart2, label: 'Stats' },
     { id: 'drivers' as AdminScreen, icon: Users, label: 'Equipo' },
+    { id: 'menu' as AdminScreen, icon: BookOpen, label: 'Menú' },
   ];
 
   return (
