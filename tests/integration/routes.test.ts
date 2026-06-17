@@ -1,6 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import jwt from 'jsonwebtoken';
 import request from 'supertest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
+
+const TEST_JWT_SECRET = 'test-secret-for-tests';
+process.env.JWT_SECRET = TEST_JWT_SECRET;
+
+function makeToken(role: 'admin' | 'delivery' = 'admin') {
+  return jwt.sign({ userId: 1, role }, TEST_JWT_SECRET, { expiresIn: '1h' });
+}
 
 // Mock the OrderRepository singleton before importing routes
 vi.mock('../../src/infrastructure/repositories/OrderRepository.js', () => {
@@ -20,6 +28,14 @@ vi.mock('../../src/infrastructure/repositories/OrderRepository.js', () => {
   };
   return { orderRepository: mockRepo, OrderRepository: vi.fn(() => mockRepo) };
 });
+
+// Mock pool to avoid real DB calls in auth/users routes
+vi.mock('../../src/infrastructure/database/connection.js', () => ({
+  pool: { query: vi.fn().mockResolvedValue({ rows: [] }) },
+  query: vi.fn().mockResolvedValue([]),
+  queryOne: vi.fn().mockResolvedValue(undefined),
+  initDatabase: vi.fn().mockResolvedValue(undefined),
+}));
 
 // Mock WhatsApp sender to avoid real HTTP calls
 vi.mock('../../src/infrastructure/whatsapp/WhatsAppSender.js', () => ({
@@ -90,42 +106,66 @@ describe('POST /api/v1/orders', () => {
     paymentMethod: 'cash',
   };
 
-  it('creates order and returns 201', async () => {
+  it('returns 401 without token', async () => {
     const res = await request(app).post('/api/v1/orders').send(validBody);
+    expect(res.status).toBe(401);
+  });
+
+  it('creates order and returns 201', async () => {
+    const res = await request(app)
+      .post('/api/v1/orders')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .send(validBody);
     expect(res.status).toBe(201);
     expect(res.body).toHaveProperty('id');
     expect(res.body.id).toMatch(/^SH-/);
   });
 
   it('returns 400 when customer missing', async () => {
-    const res = await request(app).post('/api/v1/orders').send({ ...validBody, customer: undefined });
+    const res = await request(app)
+      .post('/api/v1/orders')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .send({ ...validBody, customer: undefined });
     expect(res.status).toBe(400);
   });
 
   it('returns 400 when items empty', async () => {
-    const res = await request(app).post('/api/v1/orders').send({ ...validBody, items: [] });
+    const res = await request(app)
+      .post('/api/v1/orders')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .send({ ...validBody, items: [] });
     expect(res.status).toBe(400);
   });
 
   it('returns 400 for invalid type', async () => {
-    const res = await request(app).post('/api/v1/orders').send({ ...validBody, type: 'teleport' });
+    const res = await request(app)
+      .post('/api/v1/orders')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .send({ ...validBody, type: 'teleport' });
     expect(res.status).toBe(400);
   });
 
   it('returns 400 for delivery without address', async () => {
-    const res = await request(app).post('/api/v1/orders').send({ ...validBody, type: 'delivery' });
+    const res = await request(app)
+      .post('/api/v1/orders')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .send({ ...validBody, type: 'delivery' });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('Address');
   });
 
   it('returns 400 for invalid paymentMethod', async () => {
-    const res = await request(app).post('/api/v1/orders').send({ ...validBody, paymentMethod: 'bitcoin' });
+    const res = await request(app)
+      .post('/api/v1/orders')
+      .set('Authorization', `Bearer ${makeToken()}`)
+      .send({ ...validBody, paymentMethod: 'bitcoin' });
     expect(res.status).toBe(400);
   });
 
   it('returns 400 for unknown product', async () => {
     const res = await request(app)
       .post('/api/v1/orders')
+      .set('Authorization', `Bearer ${makeToken()}`)
       .send({ ...validBody, items: [{ productId: 'no-existe', quantity: 1 }] });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('not found');
@@ -134,6 +174,7 @@ describe('POST /api/v1/orders', () => {
   it('auto-confirms small orders (total < 50000, ≤3 items)', async () => {
     const res = await request(app)
       .post('/api/v1/orders')
+      .set('Authorization', `Bearer ${makeToken()}`)
       .send({ ...validBody, items: [{ productId: 'coca-400', quantity: 1 }] });
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('confirmed');
@@ -141,16 +182,30 @@ describe('POST /api/v1/orders', () => {
 });
 
 describe('GET /api/v1/orders', () => {
-  it('returns 200 with empty list when no orders', async () => {
+  it('returns 401 without token', async () => {
     const res = await request(app).get('/api/v1/orders');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 200 with empty list when no orders', async () => {
+    const res = await request(app)
+      .get('/api/v1/orders')
+      .set('Authorization', `Bearer ${makeToken()}`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });
 });
 
 describe('GET /api/v1/orders/:id', () => {
-  it('returns 404 for unknown order', async () => {
+  it('returns 401 without token', async () => {
     const res = await request(app).get('/api/v1/orders/SH-UNKNOWN');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 404 for unknown order', async () => {
+    const res = await request(app)
+      .get('/api/v1/orders/SH-UNKNOWN')
+      .set('Authorization', `Bearer ${makeToken()}`);
     expect(res.status).toBe(404);
   });
 });
