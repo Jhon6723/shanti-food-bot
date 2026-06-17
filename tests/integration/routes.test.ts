@@ -315,6 +315,9 @@ describe('PATCH /api/v1/orders/:id — role enforcement', () => {
       confirm: vi.fn(), prepare: vi.fn(), markReady: vi.fn(),
       deliver: mockDeliver, cancel: vi.fn(),
       notes: '',
+      customer: { name: 'Juan', phone: '573001234567', toJSON: vi.fn().mockReturnValue({ name: 'Juan', phone: '573001234567' }) },
+      id: 'SH-TEST',
+      type: 'delivery',
       toJSON: vi.fn().mockReturnValue({ id: 'SH-TEST', status: 'delivered' }),
     });
     mockRepo.update.mockResolvedValueOnce(undefined);
@@ -334,6 +337,9 @@ describe('PATCH /api/v1/orders/:id — role enforcement', () => {
       confirm: vi.fn(), prepare: vi.fn(), markReady: vi.fn(),
       deliver: vi.fn(), cancel: vi.fn(),
       notes: '',
+      customer: { name: 'Juan', phone: '573001234567', toJSON: vi.fn().mockReturnValue({ name: 'Juan', phone: '573001234567' }) },
+      id: 'SH-TEST',
+      type: 'delivery',
       toJSON: vi.fn().mockReturnValue({ id: 'SH-TEST', status: 'cancelled' }),
     });
     mockRepo.update.mockResolvedValueOnce(undefined);
@@ -344,6 +350,29 @@ describe('PATCH /api/v1/orders/:id — role enforcement', () => {
       .send({ status: 'cancelled' });
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('cancelled');
+  });
+
+  it('sends WhatsApp notification when status changes to confirmed', async () => {
+    const { sendWhatsAppMessage } = await import('../../src/infrastructure/whatsapp/WhatsAppSender.js');
+    vi.mocked(sendWhatsAppMessage).mockClear();
+    mockRepo.findById.mockResolvedValueOnce({
+      status: 'pending',
+      confirm: vi.fn(), prepare: vi.fn(), markReady: vi.fn(),
+      deliver: vi.fn(), cancel: vi.fn(),
+      notes: '',
+      customer: { name: 'Juan', phone: '573001234567', toJSON: vi.fn().mockReturnValue({ name: 'Juan', phone: '573001234567' }) },
+      id: 'SH-TEST',
+      type: 'delivery',
+      toJSON: vi.fn().mockReturnValue({ id: 'SH-TEST', status: 'confirmed' }),
+    });
+    mockRepo.update.mockResolvedValueOnce(undefined);
+
+    const res = await request(app)
+      .patch('/api/v1/orders/SH-TEST')
+      .set('Authorization', `Bearer ${makeToken('admin')}`)
+      .send({ status: 'confirmed' });
+    expect(res.status).toBe(200);
+    expect(vi.mocked(sendWhatsAppMessage)).toHaveBeenCalledWith('573001234567', expect.stringContaining('confirmado'));
   });
 });
 

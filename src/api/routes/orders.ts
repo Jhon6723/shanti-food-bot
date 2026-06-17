@@ -4,10 +4,40 @@ import { Router, type Request, type Response } from 'express';
 import { Order } from '../../domain/models/Order.js';
 import { getProductById } from '../../domain/models/Product.js';
 import { orderRepository } from '../../infrastructure/repositories/OrderRepository.js';
+import { sendWhatsAppMessage } from '../../infrastructure/whatsapp/WhatsAppSender.js';
 import type { OrderRequestData, OrderStatus } from '../../types/index.js';
 import { requireJWT, requireRole } from '../middleware/auth.js';
 
 const router = Router();
+
+const statusNotificationMessages: Record<OrderStatus, ((order: Order) => string) | null> = {
+  pending: null,
+  confirmed: (order) => `✅ *¡Tu pedido ha sido confirmado!*\n\nPedido: *#${order.id}*\n\nTu orden está en preparación. Te notificaremos cuando esté lista. 🍳`,
+  preparing: (order) => `🍳 *Tu pedido está en preparación*\n\nPedido: *#${order.id}*\n\nTiempo estimado de preparación: ~25 minutos.\n\nTe avisaremos cuando esté listo. 🎉`,
+  ready: (order) => {
+    if (order.type === 'delivery') {
+      return `🎉 *¡Tu pedido está listo!*\n\nPedido: *#${order.id}*\n\nUn repartidor está en camino a tu dirección. 🛵\n\nGracias por preferir Arrocería Shanti 🍚`;
+    }
+    return `🎉 *¡Tu pedido está listo!*\n\nPedido: *#${order.id}*\n\nPuedes pasar a recogerlo en nuestro restaurante. 🏪\n\nGracias por preferir Arrocería Shanti 🍚`;
+  },
+  delivered: (order) => `✅ *¡Pedido entregado!*\n\nPedido: *#${order.id}*\n\nGracias por tu compra. Esperamos verte pronto. 🍚\n\n¿Cómo fue tu experiencia?`,
+  cancelled: (order) => `❌ *Pedido cancelado*\n\nPedido: *#${order.id}*\n\nTu pedido ha sido cancelado. Si tienes dudas, escríbenos.`,
+};
+
+async function notifyCustomer(order: Order, status: OrderStatus): Promise<void> {
+  const messageBuilder = statusNotificationMessages[status];
+  if (!messageBuilder) return;
+
+  const text = messageBuilder(order);
+  const phone = order.customer.phone;
+
+  try {
+    await sendWhatsAppMessage(phone, text);
+  } catch {
+    // fire-and-forget: don't fail the status update if WhatsApp fails
+    console.error(`[orders/notify] Failed to send ${status} notification for order ${order.id}`);
+  }
+}
 
 // POST /orders — Create new order
 router.post('/', async (req: Request, res: Response) => {
@@ -153,6 +183,11 @@ router.patch('/:id', requireJWT, async (req: Request, res: Response) => {
     if (notes) order.notes = notes;
 
     await orderRepository.update(order);
+
+    if (status) {
+      await notifyCustomer(order, status);
+    }
+
     res.json(order.toJSON());
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
