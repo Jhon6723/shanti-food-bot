@@ -20,7 +20,7 @@ const statusNotificationMessages: Record<OrderStatus, ((order: Order) => string)
     }
     return `🎉 *¡Tu pedido está listo!*\n\nPedido: *#${order.id}*\n\nPuedes pasar a recogerlo en nuestro restaurante. 🏪\n\nGracias por preferir Arrocería Shanti 🍚`;
   },
-  delivered: (order) => `✅ *¡Pedido entregado!*\n\nPedido: *#${order.id}*\n\nGracias por tu compra. Esperamos verte pronto. 🍚\n\n¿Cómo fue tu experiencia?`,
+  delivered: (order) => `✅ *¡Pedido entregado!*\n\nPedido: *#${order.id}*\n\nGracias por tu compra. Esperamos verte pronto. 🍚`,
   cancelled: (order) => `❌ *Pedido cancelado*\n\nPedido: *#${order.id}*\n\nTu pedido ha sido cancelado. Si tienes dudas, escríbenos.`,
 };
 

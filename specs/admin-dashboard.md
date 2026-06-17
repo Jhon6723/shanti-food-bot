@@ -1,8 +1,8 @@
 # SDD — Admin Dashboard (PWA)
 # Arrocería Shanti — Panel de Administración
 
-**Versión:** 1.2  
-**Fecha:** 2026-06-16  
+**Versión:** 1.3  
+**Fecha:** 2026-06-17  
 **Tipo:** Progressive Web App (PWA)  
 **Backend:** API existente en `src/api/routes/` — ver `specs/openapi.yaml`
 
@@ -79,7 +79,7 @@ admin/
 | Rol | Ruta de entrada | Permisos |
 |-----|----------------|----------|
 | `admin` | `/admin` | Todos los pedidos, todos los estados, stats |
-| `delivery` | `/delivery` | Solo pedidos `ready`, solo marcar `delivered` + foto |
+| `delivery` | `/delivery` | Solo pedidos `ready`, solo marcar `delivered` |
 
 El JWT incluye el campo `role` en el payload. El frontend redirige según el rol al hacer login.
 
@@ -444,16 +444,19 @@ En Android (Chrome):
 | Editar repartidor | admin | `PATCH /api/v1/users/:id` | ✅ JWT |
 | Activar / Desactivar | admin | `PATCH /api/v1/users/:id { active: bool }` | ✅ JWT |
 
+**Implementado (v1.3):**
+- ✅ `POST /api/v1/auth/login` con campo `role` en el JWT payload
+- ✅ Middleware JWT `requireJWT` con validación de rol en rutas de órdenes
+- ✅ Tabla `users` (unifica admin + repartidores, campo `role`)
+- ✅ Columna `delivered_by` (FK a `users`) en tabla `orders`
+- ✅ Endpoint `GET /api/v1/users/:id/stats` para stats de repartidor
+- ✅ Contraseñas hasheadas con `bcrypt`
+- ✅ Notificaciones WhatsApp al cliente por cambio de estado
+
 **Pendiente en backend (a implementar en v1.4):**
-- `POST /api/v1/auth/login` con campo `role` en el JWT payload — ver `docs/SECURITY.md` issue #2
-- Middleware JWT `requireJWT` con validación de rol en rutas de órdenes
 - `POST /api/v1/orders/:id/delivery-proof` — endpoint nuevo para subir foto
 - Campo `delivery_proof_url` en tabla `orders` (migración DB)
 - Definir storage para fotos: S3, Cloudinary o almacenamiento local
-- Nueva tabla `users` en DB (unifica admin + repartidores, campo `role`) y rutas `src/api/routes/users.ts`
-- Columna `delivered_by` (FK a `users`) en tabla `orders`
-- Endpoint `GET /api/v1/users/:id/stats` para stats de repartidor
-- Contraseñas hasheadas con `bcrypt` (nunca en texto plano)
 
 ---
 
@@ -554,7 +557,22 @@ SELECT id FROM users WHERE role = 'delivery';
 
 ## 10. Comunicación Asíncrona
 
-### Decisión: Polling con React Query + sonido (v1.4)
+### Notificaciones WhatsApp al Cliente (v1.3)
+
+Cada vez que el admin cambia el estado de un pedido, el cliente recibe una notificación por WhatsApp:
+
+| Estado | Mensaje al cliente |
+|--------|-------------------|
+| `confirmed` | ✅ Tu pedido ha sido confirmado. Está en preparación. |
+| `preparing` | 🍳 Tu pedido está en preparación. Tiempo estimado: ~25 min. |
+| `ready` (delivery) | 🎉 Pedido listo. Un repartidor está en camino. |
+| `ready` (pickup) | 🎉 Pedido listo. Puedes pasar a recogerlo. |
+| `delivered` | ✅ Pedido entregado. Gracias por tu compra. |
+| `cancelled` | ❌ Pedido cancelado. |
+
+**Implementación:** El endpoint `PATCH /api/v1/orders/:id` llama a `notifyCustomer()` después de guardar el cambio en DB. Usa `sendWhatsAppMessage` (WhatsApp Cloud API). Si falla el envío, el cambio de estado no se afecta (fire-and-forget).
+
+### Polling con React Query + sonido (v1.4)
 
 **No se usa WebSocket en v1.4.** Polling a 5s con detección de pedidos nuevos y notificación sonora.
 
@@ -838,7 +856,7 @@ const { data: orders = [], isLoading } = useQuery({
 
 ## 16. Lo que NO incluye v1.4
 
-- Notificaciones push (WebSocket — v2.0)
+- Notificaciones push nativas (WebSocket — v2.0)
 - Gestión de menú / productos desde el panel
 - Historial de pedidos con filtros de fecha
 - Modo oscuro
