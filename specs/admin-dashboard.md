@@ -49,6 +49,7 @@ admin/
       OrdersPage.tsx
       StatsPage.tsx
       DriversPage.tsx
+      MenuPage.tsx
     components/
       OrderCard.tsx
       OrderStatusBadge.tsx
@@ -59,6 +60,7 @@ admin/
       useOrders.ts
       useStats.ts
       useDrivers.ts
+      useMenu.ts
       useAuth.ts
     lib/
       api.ts          ← cliente HTTP con JWT automático
@@ -79,7 +81,7 @@ admin/
 | Rol | Ruta de entrada | Permisos |
 |-----|----------------|----------|
 | `admin` | `/admin` | Todos los pedidos, todos los estados, stats |
-| `delivery` | `/delivery` | Solo pedidos `ready`, solo marcar `delivered` |
+| `delivery` | `/delivery` | Solo pedidos `ready`, solo marcar `delivered` + foto (opcional) |
 
 El JWT incluye el campo `role` en el payload. El frontend redirige según el rol al hacer login.
 
@@ -309,6 +311,80 @@ Al tocar un `OrderCard` se abre un panel con:
 
 ---
 
+## 4.6 Gestión de Menú / Productos (`/admin/menu`)
+
+Pantalla para que el administrador gestione el catálogo de productos: editar precios, cambiar disponibilidad, modificar opciones de personalización.
+
+```
+┌─────────────────────────────┐
+│ 🍚 Menú              [+ Add]│
+├─────────────────────────────┤
+│ ┌─────────────────────────┐ │
+│ │ Arroz Chino de Pollo    │ │
+│ │ $18.000  🟢 Disponible  │ │
+│ │ [Editar] [Desactivar]   │ │
+│ └─────────────────────────┘ │
+│                             │
+│ ┌─────────────────────────┐ │
+│ │ Bandeja Paisa           │ │
+│ │ $22.000  🔴 Agotado     │ │
+│ │ [Editar] [Activar]      │ │
+│ └─────────────────────────┘ │
+├─────────────────────────────┤
+│  📋 Pedidos │ 📊 Stats │ 🛵 Equipo │ 🍚 Menú │
+└─────────────────────────────┘
+```
+
+#### Modal: Crear / Editar Producto
+
+```
+┌─────────────────────────────┐
+│ Editar producto         [✕] │
+├─────────────────────────────┤
+│ Nombre                      │
+│ ┌─────────────────────────┐ │
+│ │ Arroz Chino de Pollo    │ │
+│ └─────────────────────────┘ │
+│                             │
+│ Categoría                   │
+│ ┌─────────────────────────┐ │
+│ │ Arroz Chino ▼           │ │
+│ └─────────────────────────┘ │
+│                             │
+│ Precio                      │
+│ ┌─────────────────────────┐ │
+│ │ 18000                   │ │
+│ └─────────────────────────┘ │
+│                             │
+│ Tiempo preparación (min)    │
+│ ┌─────────────────────────┐ │
+│ │ 20                      │ │
+│ └─────────────────────────┘ │
+│                             │
+│ Personalizaciones             │
+│ ┌─────────────────────────┐ │
+│ │ sin cebolla, sin ají    │ │
+│ └─────────────────────────┘ │
+│                             │
+│ [Cancelar]  [Guardar]       │
+└─────────────────────────────┘
+```
+
+**Comportamiento:**
+- El admin ve la lista de todos los productos agrupados por categoría
+- Puede expandir/colapsar cada categoría
+- Botón `[+ Add]` abre el modal de creación de producto
+- Botón `[+ Categoría]` permite crear una nueva categoría (ej: "Entradas", "Postres")
+- Las categorías se ordenan por `sort_order` (arrastrar para reordenar en v1.6)
+- Producto "desactivado" (`available: false`) no aparece en el menú del bot de WhatsApp
+- Al editar precio, los pedidos futuros usan el nuevo precio; los pasados conservan el histórico
+- Confirmar antes de eliminar producto: *"¿Eliminar Arroz Chino de Pollo? Ya no estará disponible en el menú."*
+- No se pueden eliminar categorías que tengan productos asociados
+
+**Datos desde:** `GET /api/v1/products` (público, solo disponibles) / `GET /api/v1/products?admin=true` (auth, incluye agotados) / `GET /api/v1/categories`
+
+---
+
 ## 5. Ciclo de Vida de un Pedido
 
 ### Panel Admin
@@ -443,8 +519,17 @@ En Android (Chrome):
 | Crear repartidor | admin | `POST /api/v1/users` | ✅ JWT |
 | Editar repartidor | admin | `PATCH /api/v1/users/:id` | ✅ JWT |
 | Activar / Desactivar | admin | `PATCH /api/v1/users/:id { active: bool }` | ✅ JWT |
+| Listar productos | público | `GET /api/v1/products` | ❌ |
+| Listar productos (admin) | admin | `GET /api/v1/products?admin=true` | ✅ JWT |
+| Crear producto | admin | `POST /api/v1/products` | ✅ JWT |
+| Editar producto | admin | `PATCH /api/v1/products/:id` | ✅ JWT |
+| Eliminar producto | admin | `DELETE /api/v1/products/:id` | ✅ JWT |
+| Listar categorías | público | `GET /api/v1/categories` | ❌ |
+| Crear categoría | admin | `POST /api/v1/categories` | ✅ JWT |
+| Editar categoría | admin | `PATCH /api/v1/categories/:id` | ✅ JWT |
+| Eliminar categoría | admin | `DELETE /api/v1/categories/:id` | ✅ JWT |
 
-**Implementado (v1.3):**
+**Implementado (v1.3):
 - ✅ `POST /api/v1/auth/login` con campo `role` en el JWT payload
 - ✅ Middleware JWT `requireJWT` con validación de rol en rutas de órdenes
 - ✅ Tabla `users` (unifica admin + repartidores, campo `role`)
@@ -506,6 +591,65 @@ Unifica autenticación de **administradores y repartidores** en una sola tabla. 
 | created_at | TIMESTAMPTZ | DEFAULT NOW() |
 
 **Nota:** El usuario `admin` inicial se crea via script de seed o variables de entorno al arrancar el servidor por primera vez.
+
+### Tabla `categories` (nueva — NO EXISTE todavía)
+
+Permite al admin crear, editar y eliminar categorías del menú dinámicamente. Reemplaza las categorías hardcodeadas (`arroz_chino`, `bandeja_paisa`, `bebidas`).
+
+| Columna | Tipo | Notas |
+|---------|------|-------|
+| id | VARCHAR(50) PK | slug único, ej: `arroz_chino` |
+| name | VARCHAR(100) | Nombre visible, ej: `Arroces Chinos` |
+| sort_order | INTEGER | DEFAULT 0 — orden de visualización en el menú |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
+
+**Categorías iniciales (seed):**
+```sql
+INSERT INTO categories (id, name, sort_order) VALUES
+  ('arroz_chino', 'Arroces Chinos', 1),
+  ('bandeja_paisa', 'Bandejas', 2),
+  ('bebidas', 'Bebidas', 3);
+```
+
+### Tabla `products` (nueva — NO EXISTE todavía)
+
+**Estado actual:** Los productos están hardcodeados en `src/domain/models/Product.ts`. La tabla `products` debe crearse como parte de la implementación de v1.5.
+
+Reemplazará el catálogo hardcodeado en memoria por una tabla persistente. Permite al admin editar precios, disponibilidad y personalizaciones sin tocar código.
+
+**Contexto:** Actualmente `order_items` guarda `product_id` (string) sin FK a ninguna tabla. Al crear `products`, `product_id` en `order_items` podría convertirse en FK.
+
+| Columna | Tipo | Notas |
+|---------|------|-------|
+| id | VARCHAR(50) PK | slug único, ej: `arroz-pollo` |
+| name | VARCHAR(100) | Nombre visible en el menú |
+| category_id | VARCHAR(50) FK | referencia a `categories(id)` |
+| price | INTEGER | Precio en pesos colombianos (sin decimales) |
+| description | TEXT | nullable — descripción corta |
+| available | BOOLEAN | DEFAULT true — false = no aparece en el menú |
+| preparation_minutes | INTEGER | DEFAULT 25 — tiempo estimado de preparación |
+| customization_options | TEXT[] | Array de strings, ej: `['sin cebolla', 'sin ají']` |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() |
+
+**Migración desde catálogo hardcodeado (`src/domain/models/Product.ts`):**
+```sql
+-- Seed: insertar productos actuales del catálogo hardcodeado
+INSERT INTO products (id, name, category, price, description, available, preparation_minutes, customization_options)
+VALUES
+  -- Arroces Chinos
+  ('arroz-pollo', 'Arroz Chino de Pollo', 'arroz_chino', 18000, 'Arroz salteado con pollo, verduras y salsa de soya', true, 20, ARRAY['sin cebolla', 'sin ají', 'extra pollo']),
+  ('arroz-cerdo', 'Arroz Chino de Cerdo', 'arroz_chino', 20000, 'Arroz salteado con cerdo, verduras y salsa de soya', true, 20, ARRAY['sin cebolla', 'sin ají']),
+  ('arroz-camaron', 'Arroz Chino de Camarón', 'arroz_chino', 24000, 'Arroz salteado con camarón, verduras y salsa de soya', true, 25, ARRAY['sin cebolla', 'sin ají']),
+  ('arroz-especial', 'Arroz Chino Especial', 'arroz_chino', 28000, 'Arroz salteado con pollo, cerdo, camarón y verduras', true, 25, ARRAY['sin cebolla', 'sin ají', 'extra pollo', 'extra camarón']),
+  -- Bandejas
+  ('bandeja-paisa', 'Bandeja Paisa', 'bandeja_paisa', 22000, 'Arroz, frijoles, carne molida, chorizo, huevo, arepa y aguacate', true, 25, ARRAY['sin huevo', 'sin chorizo']),
+  ('bandeja-pollo', 'Bandeja de Pollo', 'bandeja_paisa', 20000, 'Arroz, frijoles, pechuga de pollo, ensalada y arepa', true, 22, ARRAY['sin piel', 'pechuga desmechada']),
+  -- Bebidas
+  ('coca-400', 'Coca-Cola 400ml', 'bebidas', 4000, 'Gaseosa Coca-Cola personal', true, 0, ARRAY[]::text[]),
+  ('coca-1-5', 'Coca-Cola 1.5L', 'bebidas', 8000, 'Gaseosa Coca-Cola familiar', true, 0, ARRAY[]::text[]),
+  ('jugo-natural', 'Jugo Natural', 'bebidas', 6000, 'Jugo de fruta natural del día', true, 5, ARRAY['sin azúcar', 'con leche']);
+```
 
 ### Cambios en tabla `orders` (ALTER TABLE)
 
@@ -702,6 +846,8 @@ app.use('/admin', express.static(path.join(__dirname, '../admin/dist')));
 | Error al subir foto | Toast rojo: "No se pudo subir la foto. Puedes intentarlo de nuevo o marcar sin foto." |
 | Token expirado (401) | Limpia localStorage y redirige a `/login` automáticamente |
 | Error al crear repartidor (409) | Inline bajo el campo usuario: "Este nombre de usuario ya existe." |
+| Error al crear producto (409) | Inline: "Ya existe un producto con este ID." |
+| Error al editar producto | Toast rojo: "No se pudo guardar el producto. Intenta de nuevo." |
 | Error genérico del servidor (500) | Toast rojo: "Error del servidor. Intenta más tarde." |
 
 ---
@@ -796,6 +942,8 @@ El prototipo generado en Figma Make es la **base visual y estructural** del fron
 | `components/DriversScreen.tsx` | `pages/DriversPage.tsx` | Conectar a `GET/POST /api/v1/users?role=delivery` |
 | `components/DriverFormModal.tsx` | `components/DriverFormModal.tsx` | Conectar a `POST /api/v1/users` y `PATCH /api/v1/users/:id` |
 | `components/DriverStatsScreen.tsx` | `pages/DriverStatsPage.tsx` | Conectar a `GET /api/v1/users/:id/stats` |
+| `components/MenuScreen.tsx` | `pages/MenuPage.tsx` | Conectar a `GET/POST/PATCH /api/v1/products` |
+| `components/ProductFormModal.tsx` | `components/ProductFormModal.tsx` | Conectar a `POST /api/v1/products` y `PATCH /api/v1/products/:id` |
 | `components/DeliveryScreen.tsx` | `pages/DeliveryPage.tsx` | Usar `useQuery` con `refetchInterval: 5000`, conectar "Marcar entregado" a `PATCH /api/v1/orders/:id` |
 | `components/BottomNav.tsx` | `components/BottomNav.tsx` | Sin cambios — reutilizar directo |
 | `components/Toast.tsx` | `components/Toast.tsx` | Sin cambios — reutilizar directo |
@@ -857,8 +1005,17 @@ const { data: orders = [], isLoading } = useQuery({
 ## 16. Lo que NO incluye v1.4
 
 - Notificaciones push nativas (WebSocket — v2.0)
-- Gestión de menú / productos desde el panel
 - Historial de pedidos con filtros de fecha
 - Modo oscuro
 - Asignación manual de pedidos a repartidor específico
 - Storage de fotos en la nube (v1.4 omite upload, solo PATCH status)
+
+## 17. Planificado para v1.5 — Gestión de Menú
+
+- Tabla `categories` en DB (categorías dinámicas, reemplaza hardcodeadas)
+- Tabla `products` en DB (reemplaza catálogo hardcodeado en memoria)
+- Endpoints CRUD productos: `GET/POST/PATCH/DELETE /api/v1/products`
+- Endpoints CRUD categorías: `GET/POST/PATCH/DELETE /api/v1/categories`
+- Pantalla `MenuPage` en admin panel con gestión de categorías
+- Productos desactivados no aparecen en el menú del bot de WhatsApp
+- Precios editables en tiempo real (pedidos futuros usan nuevo precio)

@@ -1,0 +1,414 @@
+# Shanti Food API — HTTP Client (VS Code REST Client / IntelliJ HTTP Client)
+# Instala la extensión "REST Client" en VS Code para ejecutar estos requests
+#
+# Variables: cambia @host según el entorno
+# Local:      @host = http://localhost:3000
+# Producción: @host = https://tu-dominio.com
+
+@host = https://shanti-bot.pixpro.lat
+@base = {{host}}/api/v1
+
+# Guarda el token tras hacer login (se actualiza manualmente o via script)
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc4MTcwNjQ0MywiZXhwIjoxNzgxNzM1MjQzfQ.6UOx_-gXpKp48udJ_S3fBFBi967MzU-LLVhNoXMe620
+
+
+# ─── HEALTH ──────────────────────────────────────────────────────────────────
+
+### Health check
+GET {{host}}/health
+
+
+# ─── AUTH ────────────────────────────────────────────────────────────────────
+
+### Login admin → copia el token en @token arriba
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+###  Login inválido (credenciales incorrectas → 401)
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "wrong"
+}
+
+### Login sin campos (→ 400)
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{}
+
+
+# ─── USERS ───────────────────────────────────────────────────────────────────
+
+### Listar todos los usuarios
+GET {{base}}/users
+Authorization: Bearer {{token}}
+
+### Listar solo repartidores
+GET {{base}}/users?role=delivery
+Authorization: Bearer {{token}}
+
+### Listar solo admins
+GET {{base}}/users?role=admin
+Authorization: Bearer {{token}}
+
+### Crear repartidor
+POST {{base}}/users
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Carlos López",
+  "username": "carlos.lopez",
+  "password": "driver123",
+  "role": "delivery"
+}
+
+### Crear admin
+POST {{base}}/users
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Laura Gómez",
+  "username": "laura.gomez",
+  "password": "admin456",
+  "role": "admin"
+}
+
+### Crear usuario — username duplicado (→ 409)
+POST {{base}}/users
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Otro Admin",
+  "username": "admin",
+  "password": "pass123",
+  "role": "admin"
+}
+
+### Crear usuario — rol inválido (→ 400)
+POST {{base}}/users
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Test",
+  "username": "test.user",
+  "password": "pass123",
+  "role": "superadmin"
+}
+
+### Desactivar usuario (reemplaza 2 por el ID real)
+PATCH {{base}}/users/2
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "active": false
+}
+
+### Reactivar usuario
+PATCH {{base}}/users/2
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "active": true
+}
+
+### Cambiar nombre de usuario
+PATCH {{base}}/users/2
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Carlos López Editado"
+}
+
+### Cambiar contraseña
+PATCH {{base}}/users/2
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "password": "nueva-pass-segura"
+}
+
+### Stats de repartidor (reemplaza 2 por el ID real)
+GET {{base}}/users/2/stats
+Authorization: Bearer {{token}}
+
+### Stats usuario inexistente (→ 404)
+GET {{base}}/users/999/stats
+Authorization: Bearer {{token}}
+
+### Sin token (→ 401)
+GET {{base}}/users
+
+### Con token de repartidor (→ 403 — solo admins)
+# Primero haz login con un usuario delivery y pega el token aquí
+# GET {{base}}/users
+# Authorization: Bearer TOKEN_DELIVERY_AQUI
+
+
+# ─── ORDERS ──────────────────────────────────────────────────────────────────
+
+### Listar todos los pedidos
+GET {{base}}/orders
+
+### Listar pedidos pendientes
+GET {{base}}/orders?status=pending
+Authorization: Bearer {{token}}
+
+### Listar pedidos de domicilio
+GET {{base}}/orders?type=delivery
+Authorization: Bearer {{token}}
+
+### Crear pedido — pickup
+POST {{base}}/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "customer": { "name": "Ana Torres", "phone": "3001234567" },
+  "items": [{ "productId": "arroz-pollo", "quantity": 2 }],
+  "type": "pickup",
+  "paymentMethod": "cash"
+}
+
+### Crear pedido — delivery
+POST {{base}}/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "customer": { "name": "Luis Pérez", "phone": "3109876543" },
+  "items": [
+    { "productId": "arroz-pollo", "quantity": 1, "customizations": ["sin cebolla"] },
+    { "productId": "coca-400", "quantity": 2 }
+  ],
+  "type": "delivery",
+  "address": "Calle 45 #12-34, Barrio Centro",
+  "paymentMethod": "nequi",
+  "notes": "Timbre roto, llamar al llegar"
+}
+
+### Crear pedido — sin cliente (→ 400)
+POST {{base}}/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "items": [{ "productId": "arroz-pollo", "quantity": 1 }],
+  "type": "pickup",
+  "paymentMethod": "cash"
+}
+
+### Crear pedido — delivery sin dirección (→ 400)
+POST {{base}}/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "customer": { "name": "Test", "phone": "3001234567" },
+  "items": [{ "productId": "arroz-pollo", "quantity": 1 }],
+  "type": "delivery",
+  "paymentMethod": "cash"
+}
+
+### Crear pedido — producto inexistente (→ 400)
+POST {{base}}/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "customer": { "name": "Test", "phone": "3001234567" },
+  "items": [{ "productId": "no-existe", "quantity": 1 }],
+  "type": "pickup",
+  "paymentMethod": "cash"
+}
+
+### Sin token (→ 401)
+POST {{base}}/orders
+Content-Type: application/json
+
+{
+  "customer": { "name": "Test", "phone": "3001234567" },
+  "items": [{ "productId": "arroz-pollo", "quantity": 1 }],
+  "type": "pickup",
+  "paymentMethod": "cash"
+}
+
+### Obtener pedido por ID (reemplaza SH-XXXX por un ID real)
+GET {{base}}/orders/SH-MQI6NZFIIEU
+Authorization: Bearer {{token}}
+
+### Pedido inexistente (→ 404)
+GET {{base}}/orders/SH-NOEXI
+Authorization: Bearer {{token}}
+
+### Actualizar estado → confirmar
+PATCH {{base}}/orders/SH-MQI6NZFIIEU
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "confirmed"
+}
+
+### Actualizar estado → en preparación
+PATCH {{base}}/orders/SH-MQI6NZFIIEU
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "preparing"
+}
+
+### Actualizar estado → listo para entrega
+PATCH {{base}}/orders/SH-MQI6NZFIIEU
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "ready"
+}
+
+### Actualizar estado → entregado
+PATCH {{base}}/orders/SH-MQI6NZFIIEU
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "delivered"
+}
+
+### Cancelar pedido
+PATCH {{base}}/orders/SH-MQI6NZFIIEU
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "cancelled",
+  "notes": "Cliente canceló por teléfono"
+}
+
+
+# ─── PRODUCTS ────────────────────────────────────────────────────────────────
+
+### Listar todos los productos
+GET {{base}}/products
+
+### Filtrar por categoría
+GET {{base}}/products?category=bebidas
+
+### Solo disponibles
+GET {{base}}/products?available=true
+
+### Producto por ID
+GET {{base}}/products/arroz-pollo
+
+### Producto inexistente (→ 404)
+GET {{base}}/products/no-existe
+
+### Menú formato WhatsApp
+GET {{base}}/products/menu/whatsapp
+
+### Crear producto (admin)
+POST {{base}}/products
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "id": "arroz-camarones",
+  "name": "Arroz Chino de Camarones",
+  "category": "arroz_chino",
+  "price": 25000,
+  "description": "Arroz salteado con camarones frescos y verduras",
+  "available": true,
+  "preparationMinutes": 25,
+  "customizationOptions": ["sin ají", "extra camarones"]
+}
+
+### Actualizar producto (admin)
+PATCH {{base}}/products/arroz-pollo
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "price": 20000,
+  "available": false
+}
+
+### Eliminar producto (admin)
+DELETE {{base}}/products/arroz-camarones
+Authorization: Bearer {{token}}
+
+### Listar productos incluyendo agotados (admin)
+GET {{base}}/products?admin=true
+Authorization: Bearer {{token}}
+
+### Listar categorías
+GET {{base}}/categories
+
+### Crear categoría (admin)
+POST {{base}}/categories
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "id": "entradas",
+  "name": "Entradas",
+  "sortOrder": 4
+}
+
+### Editar categoría (admin)
+PATCH {{base}}/categories/entradas
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Entradas y Aperitivos",
+  "sortOrder": 1
+}
+
+### Eliminar categoría (admin)
+DELETE {{base}}/categories/entradas
+Authorization: Bearer {{token}}
+
+
+# ─── WEBHOOK ─────────────────────────────────────────────────────────────────
+
+### Test bot — solo funciona en desarrollo (NODE_ENV != production)
+GET {{host}}/api/v1/webhooks/test?phone=3011758999&message=hola
+
+### Test bot — ver menú
+GET {{host}}/api/v1/webhooks/test?phone=3011758999&message=1
+
+### Simulación webhook Meta (sin App Secret configurado)
+POST {{base}}/webhooks/whatsapp
+Content-Type: application/json
+
+{
+  "entry": [{
+    "changes": [{
+      "value": {
+        "messages": [{
+          "id": "test-msg-001",
+          "from": "573011758999",
+          "type": "text",
+          "text": { "body": "hola" }
+        }]
+      }
+    }]
+  }]
+}
