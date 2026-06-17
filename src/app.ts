@@ -1,7 +1,7 @@
 // Express app factory — separated from server startup for testability
 
 import express, { type NextFunction, type Request, type Response } from 'express';
-import { requireJWT } from './api/middleware/auth.js';
+import { join } from 'path';
 import authRouter from './api/routes/auth.js';
 import ordersRouter from './api/routes/orders.js';
 import productsRouter from './api/routes/products.js';
@@ -19,10 +19,17 @@ export function createApp() {
   });
 
   app.use('/api/v1/auth', authRouter);
-  app.use('/api/v1/orders', requireJWT, ordersRouter);
+  app.use('/api/v1/orders', ordersRouter);
   app.use('/api/v1/products', productsRouter);
   app.use('/api/v1/users', usersRouter);
   app.use('/api/v1/webhooks', webhookRouter);
+
+  // Serve admin SPA static build
+  const adminDist = join(process.cwd(), 'admin', 'dist');
+  app.use('/admin', express.static(adminDist));
+  app.get('/admin/*', (_req: Request, res: Response) => {
+    res.sendFile(join(adminDist, 'index.html'));
+  });
 
   app.get('/', (_req: Request, res: Response) => {
     res.json({ name: 'Shanti Food API', version: '1.0.0' });

@@ -1,7 +1,8 @@
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
+import type { orderRepository as OrderRepoType } from '../../src/infrastructure/repositories/OrderRepository.js';
 
 const TEST_JWT_SECRET = 'test-secret-for-tests';
 process.env.JWT_SECRET = TEST_JWT_SECRET;
@@ -41,6 +42,17 @@ vi.mock('../../src/infrastructure/database/connection.js', () => ({
 vi.mock('../../src/infrastructure/whatsapp/WhatsAppSender.js', () => ({
   sendWhatsAppMessage: vi.fn().mockResolvedValue(undefined),
 }));
+
+let mockRepo: typeof OrderRepoType & {
+  findAll: ReturnType<typeof vi.fn>;
+  findById: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
+};
+
+beforeAll(async () => {
+  const mod = await import('../../src/infrastructure/repositories/OrderRepository.js');
+  mockRepo = mod.orderRepository as typeof mockRepo;
+});
 
 const app = createApp();
 
@@ -106,25 +118,25 @@ describe('POST /api/v1/orders', () => {
     paymentMethod: 'cash',
   };
 
-  it('returns 401 without token', async () => {
+  // POST /orders is public — used by the WhatsApp bot (no JWT)
+  it('creates order without token and returns 201', async () => {
     const res = await request(app).post('/api/v1/orders').send(validBody);
-    expect(res.status).toBe(401);
-  });
-
-  it('creates order and returns 201', async () => {
-    const res = await request(app)
-      .post('/api/v1/orders')
-      .set('Authorization', `Bearer ${makeToken()}`)
-      .send(validBody);
     expect(res.status).toBe(201);
     expect(res.body).toHaveProperty('id');
     expect(res.body.id).toMatch(/^SH-/);
   });
 
+  it('creates order with admin token and returns 201', async () => {
+    const res = await request(app)
+      .post('/api/v1/orders')
+      .set('Authorization', `Bearer ${makeToken('admin')}`)
+      .send(validBody);
+    expect(res.status).toBe(201);
+  });
+
   it('returns 400 when customer missing', async () => {
     const res = await request(app)
       .post('/api/v1/orders')
-      .set('Authorization', `Bearer ${makeToken()}`)
       .send({ ...validBody, customer: undefined });
     expect(res.status).toBe(400);
   });
@@ -132,7 +144,6 @@ describe('POST /api/v1/orders', () => {
   it('returns 400 when items empty', async () => {
     const res = await request(app)
       .post('/api/v1/orders')
-      .set('Authorization', `Bearer ${makeToken()}`)
       .send({ ...validBody, items: [] });
     expect(res.status).toBe(400);
   });
@@ -140,7 +151,6 @@ describe('POST /api/v1/orders', () => {
   it('returns 400 for invalid type', async () => {
     const res = await request(app)
       .post('/api/v1/orders')
-      .set('Authorization', `Bearer ${makeToken()}`)
       .send({ ...validBody, type: 'teleport' });
     expect(res.status).toBe(400);
   });
@@ -148,7 +158,6 @@ describe('POST /api/v1/orders', () => {
   it('returns 400 for delivery without address', async () => {
     const res = await request(app)
       .post('/api/v1/orders')
-      .set('Authorization', `Bearer ${makeToken()}`)
       .send({ ...validBody, type: 'delivery' });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('Address');
@@ -157,7 +166,6 @@ describe('POST /api/v1/orders', () => {
   it('returns 400 for invalid paymentMethod', async () => {
     const res = await request(app)
       .post('/api/v1/orders')
-      .set('Authorization', `Bearer ${makeToken()}`)
       .send({ ...validBody, paymentMethod: 'bitcoin' });
     expect(res.status).toBe(400);
   });
@@ -165,7 +173,6 @@ describe('POST /api/v1/orders', () => {
   it('returns 400 for unknown product', async () => {
     const res = await request(app)
       .post('/api/v1/orders')
-      .set('Authorization', `Bearer ${makeToken()}`)
       .send({ ...validBody, items: [{ productId: 'no-existe', quantity: 1 }] });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('not found');
@@ -174,7 +181,6 @@ describe('POST /api/v1/orders', () => {
   it('auto-confirms small orders (total < 50000, ≤3 items)', async () => {
     const res = await request(app)
       .post('/api/v1/orders')
-      .set('Authorization', `Bearer ${makeToken()}`)
       .send({ ...validBody, items: [{ productId: 'coca-400', quantity: 1 }] });
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('confirmed');
@@ -187,12 +193,57 @@ describe('GET /api/v1/orders', () => {
     expect(res.status).toBe(401);
   });
 
-  it('returns 200 with empty list when no orders', async () => {
+  it('admin: returns 200 with full list', async () => {
     const res = await request(app)
       .get('/api/v1/orders')
-      .set('Authorization', `Bearer ${makeToken()}`);
+      .set('Authorization', `Bearer ${makeToken('admin')}`);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual([]);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('admin: respects ?status filter', async () => {
+    const res = await request(app)
+      .get('/api/v1/orders?status=pending')
+      .set('Authorization', `Bearer ${makeToken('admin')}`);
+    expect(res.status).toBe(200);
+  });
+
+  it('delivery: returns 200 but only ready orders (ignores ?status param)', async () => {
+    mockRepo.findAll.mockResolvedValueOnce([]);
+
+    const res = await request(app)
+      .get('/api/v1/orders?status=pending') // should be overridden to ready
+      .set('Authorization', `Bearer ${makeToken('delivery')}`);
+    expect(res.status).toBe(200);
+    // verify the repository was called with status=ready regardless of query param
+    expect(mockRepo.findAll).toHaveBeenCalledWith(expect.objectContaining({ status: 'ready' }));
+  });
+});
+
+describe('GET /api/v1/orders/stats/dashboard', () => {
+  it('returns 401 without token', async () => {
+    const res = await request(app).get('/api/v1/orders/stats/dashboard');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for delivery role', async () => {
+    const res = await request(app)
+      .get('/api/v1/orders/stats/dashboard')
+      .set('Authorization', `Bearer ${makeToken('delivery')}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('admin: returns 200 with stats object', async () => {
+    const res = await request(app)
+      .get('/api/v1/orders/stats/dashboard')
+      .set('Authorization', `Bearer ${makeToken('admin')}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      total: expect.any(Number),
+      pending: expect.any(Number),
+      delivered: expect.any(Number),
+      todayRevenue: expect.any(Number),
+    });
   });
 });
 
@@ -202,11 +253,95 @@ describe('GET /api/v1/orders/:id', () => {
     expect(res.status).toBe(401);
   });
 
-  it('returns 404 for unknown order', async () => {
+  it('admin: returns 404 for unknown order', async () => {
     const res = await request(app)
       .get('/api/v1/orders/SH-UNKNOWN')
-      .set('Authorization', `Bearer ${makeToken()}`);
+      .set('Authorization', `Bearer ${makeToken('admin')}`);
     expect(res.status).toBe(404);
+  });
+
+  it('delivery: returns 404 for unknown order', async () => {
+    const res = await request(app)
+      .get('/api/v1/orders/SH-UNKNOWN')
+      .set('Authorization', `Bearer ${makeToken('delivery')}`);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('PATCH /api/v1/orders/:id — role enforcement', () => {
+  it('returns 401 without token', async () => {
+    const res = await request(app)
+      .patch('/api/v1/orders/SH-UNKNOWN')
+      .send({ status: 'confirmed' });
+    expect(res.status).toBe(401);
+  });
+
+  it('delivery: returns 403 when trying to set status other than delivered', async () => {
+    mockRepo.findById.mockResolvedValueOnce({
+      status: 'ready',
+      confirm: vi.fn(), prepare: vi.fn(), markReady: vi.fn(),
+      deliver: vi.fn(), cancel: vi.fn(),
+      toJSON: vi.fn().mockReturnValue({ id: 'SH-TEST', status: 'delivered' }),
+    });
+
+    const res = await request(app)
+      .patch('/api/v1/orders/SH-TEST')
+      .set('Authorization', `Bearer ${makeToken('delivery')}`)
+      .send({ status: 'confirmed' });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain('Delivery drivers');
+  });
+
+  it('delivery: returns 409 when order is not ready', async () => {
+    mockRepo.findById.mockResolvedValueOnce({
+      status: 'preparing',
+      confirm: vi.fn(), prepare: vi.fn(), markReady: vi.fn(),
+      deliver: vi.fn(), cancel: vi.fn(),
+      toJSON: vi.fn().mockReturnValue({ id: 'SH-TEST', status: 'preparing' }),
+    });
+
+    const res = await request(app)
+      .patch('/api/v1/orders/SH-TEST')
+      .set('Authorization', `Bearer ${makeToken('delivery')}`)
+      .send({ status: 'delivered' });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain('ready');
+  });
+
+  it('delivery: returns 200 when marking ready order as delivered', async () => {
+    mockRepo.findById.mockResolvedValueOnce({
+      status: 'ready',
+      confirm: vi.fn(), prepare: vi.fn(), markReady: vi.fn(),
+      deliver: vi.fn(), cancel: vi.fn(),
+      notes: '',
+      toJSON: vi.fn().mockReturnValue({ id: 'SH-TEST', status: 'delivered' }),
+    });
+    mockRepo.update.mockResolvedValueOnce(undefined);
+
+    const res = await request(app)
+      .patch('/api/v1/orders/SH-TEST')
+      .set('Authorization', `Bearer ${makeToken('delivery')}`)
+      .send({ status: 'delivered' });
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('delivered');
+  });
+
+  it('admin: can cancel any order', async () => {
+    mockRepo.findById.mockResolvedValueOnce({
+      status: 'pending',
+      confirm: vi.fn(), prepare: vi.fn(), markReady: vi.fn(),
+      deliver: vi.fn(), cancel: vi.fn(),
+      notes: '',
+      toJSON: vi.fn().mockReturnValue({ id: 'SH-TEST', status: 'cancelled' }),
+    });
+    mockRepo.update.mockResolvedValueOnce(undefined);
+
+    const res = await request(app)
+      .patch('/api/v1/orders/SH-TEST')
+      .set('Authorization', `Bearer ${makeToken('admin')}`)
+      .send({ status: 'cancelled' });
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('cancelled');
   });
 });
 

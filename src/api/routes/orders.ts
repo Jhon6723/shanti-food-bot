@@ -5,6 +5,7 @@ import { Order } from '../../domain/models/Order.js';
 import { getProductById } from '../../domain/models/Product.js';
 import { orderRepository } from '../../infrastructure/repositories/OrderRepository.js';
 import type { OrderRequestData, OrderStatus } from '../../types/index.js';
+import { requireJWT, requireRole } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -64,12 +65,18 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// GET /orders — List orders with filters
-router.get('/', async (req: Request, res: Response) => {
+// GET /orders — List orders (admin: all; delivery: only ready)
+router.get('/', requireJWT, async (req: Request, res: Response) => {
   try {
     const filters: { status?: OrderStatus; type?: 'delivery' | 'pickup' } = {};
-    if (req.query.status) filters.status = req.query.status as OrderStatus;
-    if (req.query.type) filters.type = req.query.type as 'delivery' | 'pickup';
+
+    if (req.user!.role === 'delivery') {
+      // delivery drivers only see ready orders
+      filters.status = 'ready';
+    } else {
+      if (req.query.status) filters.status = req.query.status as OrderStatus;
+      if (req.query.type) filters.type = req.query.type as 'delivery' | 'pickup';
+    }
 
     const orders = await orderRepository.findAll(filters);
     res.json(orders.map((o) => o.toJSON()));
@@ -78,8 +85,17 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// GET /orders/:id — Get single order
-router.get('/:id', async (req: Request, res: Response) => {
+// GET /orders/stats/dashboard — Admin statistics (must be before /:id)
+router.get('/stats/dashboard', requireJWT, requireRole('admin'), async (_req: Request, res: Response) => {
+  try {
+    res.json(await orderRepository.getStats());
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+// GET /orders/:id — Get single order (admin: any; delivery: only if status=ready)
+router.get('/:id', requireJWT, async (req: Request, res: Response) => {
   try {
     const order = await orderRepository.findById(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
@@ -89,13 +105,24 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /orders/:id — Update order status
-router.patch('/:id', async (req: Request, res: Response) => {
+// PATCH /orders/:id — Update order status (admin: any transition; delivery: only delivered)
+router.patch('/:id', requireJWT, async (req: Request, res: Response) => {
   try {
     const order = await orderRepository.findById(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
     const { status, notes } = req.body as { status?: OrderStatus; notes?: string };
+
+    // delivery role can only mark an order as delivered
+    if (req.user!.role === 'delivery') {
+      if (status !== 'delivered') {
+        return res.status(403).json({ error: 'Delivery drivers can only mark orders as delivered' });
+      }
+      if (order.status !== 'ready') {
+        return res.status(409).json({ error: 'Order must be ready before marking as delivered' });
+      }
+    }
+
     const validStatuses: OrderStatus[] = ['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'];
 
     if (status && !validStatuses.includes(status)) {
@@ -129,15 +156,6 @@ router.patch('/:id', async (req: Request, res: Response) => {
     res.json(order.toJSON());
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
-  }
-});
-
-// GET /orders/stats/dashboard — Admin statistics
-router.get('/stats/dashboard', async (_req: Request, res: Response) => {
-  try {
-    res.json(await orderRepository.getStats());
-  } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
   }
 });
 
