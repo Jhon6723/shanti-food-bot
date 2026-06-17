@@ -8,6 +8,7 @@ import { join } from 'path';
 import { initDatabase, pool } from './infrastructure/database/connection.js';
 
 import authRouter from './api/routes/auth.js';
+import categoriesRouter from './api/routes/categories.js';
 import ordersRouter from './api/routes/orders.js';
 import productsRouter from './api/routes/products.js';
 import usersRouter from './api/routes/users.js';
@@ -54,6 +55,7 @@ app.get('/health', (_req: Request, res: Response) => {
 
 // API Routes per OpenAPI spec
 app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/categories', categoriesRouter);
 app.use('/api/v1/orders', ordersRouter);
 app.use('/api/v1/products', productsRouter);
 app.use('/api/v1/users', usersRouter);
