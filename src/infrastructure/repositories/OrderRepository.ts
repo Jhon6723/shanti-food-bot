@@ -135,6 +135,13 @@ export class OrderRepository {
     return customerOrders.find((o) => ['pending', 'confirmed', 'preparing'].includes(o.status));
   }
 
+  async findAllPendingByCustomer(phone: string): Promise<Order[]> {
+    const customerOrders = await this.findByCustomerPhone(phone);
+    return customerOrders
+      .filter((o) => ['pending', 'confirmed', 'preparing', 'ready'].includes(o.status))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
   private normalizePhone(phone: string): string {
     return phone.replace(/^57/, '').replace(/\D/g, '');
   }

@@ -16,8 +16,21 @@ function makeRepo(overrides: Partial<OrderRepository> = {}): OrderRepository {
     delete: vi.fn().mockResolvedValue(false),
     getStats: vi.fn().mockResolvedValue({}),
     findLastDeliveryAddress: vi.fn().mockResolvedValue(null),
+    findAllPendingByCustomer: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as OrderRepository;
+}
+
+function makeOrder(id: string, status = 'pending', type: 'delivery' | 'pickup' = 'delivery') {
+  return new Order({
+    id,
+    customer: { name: 'Carlos', phone: PHONE },
+    items: [{ productId: '1', quantity: 1, unitPrice: 18000, preparationMinutes: 20, customizations: [] }],
+    type,
+    address: type === 'delivery' ? 'Carrera 10 #20-30, Barrio Centro' : undefined,
+    paymentMethod: 'cash',
+    status: status as Order['status'],
+  });
 }
 
 function msg(body: string) {
@@ -504,7 +517,7 @@ describe('WhatsAppBot — order status', () => {
     });
 
     const bot = new WhatsAppBot(makeRepo({
-      findPendingByCustomer: vi.fn().mockResolvedValue(pendingOrder),
+      findAllPendingByCustomer: vi.fn().mockResolvedValue([pendingOrder]),
     }));
 
     await bot.handleMessage(PHONE, msg('hola'));
@@ -524,7 +537,7 @@ describe('WhatsAppBot — order status', () => {
     });
 
     const bot = new WhatsAppBot(makeRepo({
-      findPendingByCustomer: vi.fn().mockResolvedValue(pickupOrder),
+      findAllPendingByCustomer: vi.fn().mockResolvedValue([pickupOrder]),
     }));
 
     await bot.handleMessage(PHONE, msg('hola'));
@@ -653,5 +666,60 @@ describe('WhatsAppBot — last address reuse', () => {
     const res = await bot.handleMessage(PHONE, msg('2')); // escribir nueva
     expect(res).toContain('dirección');
     expect(res).not.toContain('anterior');
+  });
+});
+
+describe('WhatsAppBot — order status with pagination', () => {
+  it('shows no active orders message when none exist', async () => {
+    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue([]) }));
+    const res = await bot.handleMessage(PHONE, msg('estado'));
+    expect(res).toContain('No tienes pedidos activos');
+  });
+
+  it('shows single order detail when only one active order', async () => {
+    const order = makeOrder('SH-001', 'confirmed');
+    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue([order]) }));
+    const res = await bot.handleMessage(PHONE, msg('estado'));
+    expect(res).toContain('SH-001');
+    expect(res).toContain('Confirmado');
+    expect(res).not.toContain('Ver más');
+  });
+
+  it('shows first order detail + compact list when multiple active orders', async () => {
+    const orders = [
+      makeOrder('SH-001', 'confirmed'),
+      makeOrder('SH-002', 'preparing'),
+      makeOrder('SH-003', 'pending'),
+    ];
+    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue(orders) }));
+    const res = await bot.handleMessage(PHONE, msg('estado'));
+    expect(res).toContain('SH-001');
+    expect(res).toContain('SH-002');
+    expect(res).toContain('SH-003');
+  });
+
+  it('shows next page button when more than 5 active orders (1 detail + 4 compact + more)', async () => {
+    // orders[0]=detail, orders[1..4]=compact — need orders[5+] to trigger Ver más
+    const orders = Array.from({ length: 6 }, (_, i) => makeOrder(`SH-00${i + 1}`, 'pending'));
+    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue(orders) }));
+    const res = await bot.handleMessage(PHONE, msg('estado'));
+    expect(res).toContain('Ver más');
+  });
+
+  it('navigates to next page of orders', async () => {
+    // 6 orders: [0] detail, [1..4] compact, [5] on page 2
+    const orders = Array.from({ length: 6 }, (_, i) => makeOrder(`SH-00${i + 1}`, 'pending'));
+    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue(orders) }));
+    await bot.handleMessage(PHONE, msg('estado'));
+    const res = await bot.handleMessage(PHONE, msg('1')); // Ver más → page 2
+    expect(res).toContain('SH-006'); // orders[5]
+  });
+
+  it('shows back option and no next-page when on last page', async () => {
+    const orders = Array.from({ length: 6 }, (_, i) => makeOrder(`SH-00${i + 1}`, 'pending'));
+    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue(orders) }));
+    await bot.handleMessage(PHONE, msg('estado'));
+    const res = await bot.handleMessage(PHONE, msg('1')); // Ver más → last page
+    expect(res).not.toContain('Ver más');
   });
 });

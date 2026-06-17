@@ -26,7 +26,8 @@ type BotStep =
   | 'delivery_notes'
   | 'payment'
   | 'confirm'
-  | 'modify';
+  | 'modify'
+  | 'order_status';
 
 interface SessionState {
   step: BotStep;
@@ -41,6 +42,8 @@ interface SessionState {
   currentProduct: Product | null;
   pendingItem: OrderItemData | null;
   customerName: string | null;
+  orderStatusCache: Order[] | null;
+  orderStatusPage: number;
 }
 
 class Session {
@@ -56,6 +59,8 @@ class Session {
   currentProduct: Product | null = null;
   pendingItem: OrderItemData | null = null;
   customerName: string | null = null;
+  orderStatusCache: Order[] | null = null;
+  orderStatusPage = 0;
 
   constructor(readonly phone: string) {}
 
@@ -72,6 +77,8 @@ class Session {
     this.currentProduct = null;
     this.pendingItem = null;
     this.customerName = null;
+    this.orderStatusCache = null;
+    this.orderStatusPage = 0;
   }
 }
 
@@ -106,7 +113,7 @@ export class WhatsAppBot {
     }
 
     if (text.includes('estado')) {
-      return await this.checkOrderStatus(from);
+      return await this.checkOrderStatus(from, session);
     }
 
     if (!session.step) {
@@ -146,6 +153,8 @@ export class WhatsAppBot {
         return await this.handleConfirmation(text, session, from);
       case 'modify':
         return this.handleModify(text, session);
+      case 'order_status':
+        return this.handleOrderStatus(text, session);
       default:
         session.reset();
         return this.welcomeMessage();
@@ -189,7 +198,7 @@ Responde con el número de la opción.`;
         return `📝 *Antes de ordenar...*\n\n¿Cual es tu nombre?\n\n(Escribe tu nombre para continuar)`;
       case '3':
       case 'estado':
-        return await this.checkOrderStatus(session.phone);
+        return await this.checkOrderStatus(session.phone, session);
       case '4':
       case 'ayuda':
       case 'humano':
@@ -601,48 +610,113 @@ Responde con el número de la opción.`;
     }
   }
 
-  private async checkOrderStatus(phone: string): Promise<string> {
-    const pendingOrder = await this.repo.findPendingByCustomer(phone);
-    if (!pendingOrder) {
-      return `No tienes pedidos activos en este momento.\n\nEscribe "hola" para hacer un nuevo pedido. 🍚`;
-    }
+  private readonly statusEmojis: Record<string, string> = {
+    pending: '⏳', confirmed: '✅', preparing: '🍳', ready: '🎉', delivered: '✅',
+  };
 
-    const statusEmojis: Record<string, string> = {
-      pending: '⏳',
-      confirmed: '✅',
-      preparing: '🍳',
-      ready: '🎉',
-      delivered: '✅',
-    };
-    const statusLabels: Record<string, string> = {
-      pending: 'Pendiente de confirmación',
-      confirmed: 'Confirmado',
-      preparing: 'En preparación',
-      ready: 'Listo para entrega',
-      delivered: 'Entregado',
-    };
+  private readonly statusLabels: Record<string, string> = {
+    pending: 'Pendiente de confirmación', confirmed: 'Confirmado',
+    preparing: 'En preparación', ready: 'Listo para entrega', delivered: 'Entregado',
+  };
 
-    const headerEmoji = pendingOrder.type === 'delivery' ? '🛵' : '📦';
-    let msg = `${headerEmoji} *Pedido #${pendingOrder.id}*\n\n`;
-    msg += `Estado: ${statusEmojis[pendingOrder.status]} ${statusLabels[pendingOrder.status]}\n`;
-    if (pendingOrder.status === 'preparing') {
-      const remaining = new Date(pendingOrder.estimatedReadyAt).getTime() - Date.now();
+  private formatOrderDetail(order: Order): string {
+    const headerEmoji = order.type === 'delivery' ? '🛵' : '📦';
+    let msg = `${headerEmoji} *Pedido #${order.id}*\n\n`;
+    msg += `Estado: ${this.statusEmojis[order.status]} ${this.statusLabels[order.status]}\n`;
+    if (order.status === 'preparing') {
+      const remaining = new Date(order.estimatedReadyAt).getTime() - Date.now();
       const minutes = Math.ceil(remaining / 60000);
       if (minutes > 0) msg += `Tiempo restante: ~${minutes} minutos\n`;
     }
-
     msg += `\n*Productos:*\n`;
-    for (const item of pendingOrder.items) {
+    for (const item of order.items) {
       const product = getProductById(item.productId);
       const name = product?.name ?? item.productId;
       msg += `• ${item.quantity}x ${name} — $${(item.unitPrice * item.quantity).toLocaleString()}\n`;
-      if (item.customizations.length > 0) {
-        msg += `  _(${item.customizations.join(', ')})_\n`;
+      if (item.customizations.length > 0) msg += `  _(${item.customizations.join(', ')})_\n`;
+    }
+    msg += `\nTotal: $${order.total.toLocaleString()}\nTipo: ${order.type === 'delivery' ? 'Domicilio' : 'Recoger en local'}`;
+    return msg;
+  }
+
+  private formatOrderCompact(order: Order): string {
+    const typeEmoji = order.type === 'delivery' ? '🛵' : '📦';
+    return `${typeEmoji} #${order.id} — ${this.statusEmojis[order.status]} ${this.statusLabels[order.status]} — $${order.total.toLocaleString()}`;
+  }
+
+  private buildStatusPage(orders: Order[], page: number): string {
+    const PAGE_SIZE = 4;
+    const start = page * PAGE_SIZE;
+    const slice = orders.slice(start, start + PAGE_SIZE);
+    const hasNext = orders.length > start + PAGE_SIZE;
+    let msg = `📋 *Pedidos activos (${start + 1}–${start + slice.length} de ${orders.length})*\n\n`;
+    slice.forEach((o) => { msg += `${this.formatOrderCompact(o)}\n`; });
+    msg += `\n`;
+    const opts: string[] = [];
+    if (hasNext) opts.push(`1️⃣ Ver más`);
+    opts.push(`0️⃣ Volver al menú`);
+    msg += opts.join('\n');
+    return msg;
+  }
+
+  private async checkOrderStatus(phone: string, session: Session): Promise<string> {
+    const orders = await this.repo.findAllPendingByCustomer(phone);
+    if (orders.length === 0) {
+      return `No tienes pedidos activos en este momento.\n\nEscribe "hola" para hacer un nuevo pedido. 🍚`;
+    }
+
+    session.orderStatusCache = orders;
+    session.orderStatusPage = 0;
+
+    let msg = this.formatOrderDetail(orders[0]);
+    msg += `\n\nTe notificaremos cuando haya actualizaciones. 📲`;
+
+    if (orders.length > 1) {
+      msg += `\n\n─────────────────────\n`;
+      msg += `*Otros pedidos activos:*\n`;
+      const others = orders.slice(1, 5);
+      others.forEach((o) => { msg += `${this.formatOrderCompact(o)}\n`; });
+      const remaining = orders.length - 1;
+      if (remaining > 4) {
+        session.step = 'order_status';
+        msg += `\n1️⃣ Ver más (${remaining - 4} pedido${remaining - 4 > 1 ? 's' : ''} más)\n0️⃣ Volver al menú`;
       }
     }
 
-    msg += `\nTotal: $${pendingOrder.total.toLocaleString()}\nTipo: ${pendingOrder.type === 'delivery' ? 'Domicilio' : 'Recoger en local'}\n\nTe notificaremos cuando haya actualizaciones. 📲`;
     return msg;
+  }
+
+  private handleOrderStatus(text: string, session: Session): string {
+    if (text === '0' || text === 'atras' || text === 'volver' || text === 'menu') {
+      session.step = null;
+      session.orderStatusCache = null;
+      session.orderStatusPage = 0;
+      return this.welcomeMessage();
+    }
+
+    const orders = session.orderStatusCache ?? [];
+    if (text === '1' || text === 'más' || text === 'mas' || text === 'siguiente') {
+      const PAGE_SIZE = 4;
+      // orders[0] shown in detail, orders[1..4] shown on initial compact list
+      // each "Ver más" shows the next PAGE_SIZE starting after the first 1 + page*PAGE_SIZE
+      const start = 1 + (session.orderStatusPage + 1) * PAGE_SIZE;
+      session.orderStatusPage += 1;
+      const slice = orders.slice(start, start + PAGE_SIZE);
+      const hasNext = orders.length > start + PAGE_SIZE;
+      let msg = `📋 *Más pedidos activos (${start + 1}–${start + slice.length} de ${orders.length})*\n\n`;
+      slice.forEach((o) => { msg += `${this.formatOrderCompact(o)}\n`; });
+      msg += `\n`;
+      if (hasNext) msg += `1️⃣ Ver más\n`;
+      msg += `0️⃣ Volver al menú`;
+      if (!hasNext) {
+        session.step = null;
+        session.orderStatusCache = null;
+        session.orderStatusPage = 0;
+      }
+      return msg;
+    }
+
+    return `Opción no reconocida.\n\n1️⃣ Ver más\n0️⃣ Volver al menú`;
   }
 }
 
