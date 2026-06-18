@@ -77,6 +77,45 @@ export interface DashboardStats {
   todayRevenue: number;
 }
 
+export interface SalesSummary {
+  totalOrders: number;
+  totalRevenue: number;
+  totalDeliveryFees: number;
+  averageOrderValue: number;
+  byPaymentMethod: Array<{ method: string; count: number; revenue: number }>;
+  byOrderType: Array<{ type: string; count: number; revenue: number }>;
+  byDay: Array<{ date: string; count: number; revenue: number }>;
+}
+
+export interface SalesReportOrder {
+  id: string;
+  date: string;
+  customer: string;
+  total: number;
+  paymentMethod: string;
+  type: string;
+  status: string;
+}
+
+export interface SalesReport {
+  summary: SalesSummary;
+  orders: SalesReportOrder[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface ReportFilters {
+  from: string;
+  to: string;
+  status?: string;
+  paymentMethod?: string;
+  type?: string;
+}
+
 export interface DriverStats {
   user: { id: number; name: string; username: string };
   totalDelivered: number;
