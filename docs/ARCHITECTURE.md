@@ -14,8 +14,9 @@ Sistema de pedidos por WhatsApp para Arroceria Shanti. **Monorepo** con backend 
            │ Webhook HTTPS
            ▼
 ┌─────────────────────────────────────────┐
-│  Meta WhatsApp Cloud API                │
-│  (valida, reenvia payload JSON)        │
+│  WhatsApp Provider (configurable)       │
+│  meta:   Meta Cloud API                 │
+│  openwa: Gateway OpenWA (self-hosted)   │
 └──────────┬──────────────────────────────┘
            │ POST /api/v1/webhooks/whatsapp
            ▼
@@ -46,9 +47,12 @@ Sistema de pedidos por WhatsApp para Arroceria Shanti. **Monorepo** con backend 
 ┌─────────────────────────────────────────┐
 │  Infrastructure Layer                     │
 │  • OrderRepository.ts  — PostgreSQL       │
-│  • UserRepository.ts   — PostgreSQL (new) │
+│  • UserRepository.ts   — PostgreSQL       │
 │  • connection.ts       — Pool pg          │
-│  • WhatsAppSender.ts   — Meta API out     │
+│  • whatsapp/           — Adapter pattern  │
+│    ├ adapter.ts         — Interfaz        │
+│    ├ meta/MetaAdapter   — Meta Cloud API  │
+│    └ openwa/OpenWA      — Gateway OpenWA  │
 └─────────────────────────────────────────┘
 ```
 
@@ -77,16 +81,18 @@ Ver `specs/admin-dashboard.md §11` para la estructura detallada y configuració
 
 ## Flujo de Mensaje Entrante
 
-1. Usuario envia mensaje a numero de Meta
-2. Meta hace POST al webhook con payload JSON
-3. `webhook.ts` parsea `entry[].changes[].value.messages[]`
-4. Extrae `message.from` (telefono) y `message.text.body`
+1. Usuario envía mensaje al número WhatsApp conectado
+2. El proveedor activo (`WHATSAPP_PROVIDER`) hace POST al webhook con payload JSON
+3. `webhook.ts` obtiene el adapter via `getAdapter()` y verifica la firma (si hay secret)
+4. `adapter.parseIncoming(req)` normaliza el payload a `WhatsAppWebhookPayload[]`
 5. Llama `bot.handleMessage(phone, {text})`
 6. Bot consulta/crea sesion en memoria (`Map<string, Session>`)
 7. Segun `session.step`, ejecuta handler correspondiente
 8. Genera respuesta de texto
-9. `sendWhatsAppMessage()` envia respuesta via Meta API
+9. `adapter.sendMessage(phone, text, {chatId})` envia respuesta via el proveedor activo
 10. Guarda pedido en PostgreSQL al confirmar
+
+Ver `specs/whatsapp-adapter.md` para detalle del patron Adapter.
 
 ## Flujo Conversacional (FSM)
 

@@ -4,25 +4,24 @@
 
 - Docker + Docker Compose
 - Node.js 22 (solo para desarrollo local sin Docker)
-- Cuenta Meta Developers con WhatsApp Cloud API
+- Proveedor WhatsApp: Meta Cloud API **o** OpenWA (self-hosted) — ver `.env.example`
 
 ## Variables de Entorno
 
-Copia `.env.example` a `.env` y completa:
+Copia `.env.example` a `.env` y completa. El proveedor activo se controla con `WHATSAPP_PROVIDER`:
 
 ```env
-# PostgreSQL (cambia las credenciales en produccion)
+# PostgreSQL
 POSTGRES_USER=shanti
 POSTGRES_PASSWORD=shanti123
 POSTGRES_DB=shanti_food
-DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}
+DATABASE_URL=postgres://shanti:shanti123@localhost:5433/shanti_food
 
-# WhatsApp (obtenidas de developers.facebook.com)
-WHATSAPP_PHONE_NUMBER_ID=...
-WHATSAPP_BUSINESS_ACCOUNT_ID=...
-WHATSAPP_ACCESS_TOKEN=...
-WHATSAPP_VERIFY_TOKEN=...(inventa uno secreto)
+# Proveedor: meta | openwa
+WHATSAPP_PROVIDER=openwa
 ```
+
+Ver las secciones de cada proveedor abajo para las variables específicas.
 
 ## Docker Compose (Recomendado)
 
@@ -59,9 +58,45 @@ npm run build
 npm start
 ```
 
+## Proveedores WhatsApp
+
+### Proveedor: Meta Cloud API
+
+Variables requeridas en `.env`:
+
+```env
+WHATSAPP_PROVIDER=meta
+WHATSAPP_PHONE_NUMBER_ID=...
+WHATSAPP_BUSINESS_ACCOUNT_ID=...
+WHATSAPP_ACCESS_TOKEN=...
+WHATSAPP_VERIFY_TOKEN=...    # token de verificación (tú lo inventas)
+WHATSAPP_APP_SECRET=...      # produccion: HMAC SHA-256
+```
+
+Registrar webhook en [Meta Developers](https://developers.facebook.com):
+- **Callback URL**: `https://<tu-dominio>/api/v1/webhooks/whatsapp`
+- **Verify Token**: el mismo valor de `WHATSAPP_VERIFY_TOKEN`
+- **Suscribir a**: `messages`
+
+### Proveedor: OpenWA (self-hosted)
+
+Variables requeridas en `.env`:
+
+```env
+WHATSAPP_PROVIDER=openwa
+WHATSAPP_PROVIDER_URL=http://localhost:2785
+WHATSAPP_PROVIDER_API_KEY=owa_k1_...   # generada por OpenWA al iniciar
+WHATSAPP_OPENWA_SESSION=<UUID>          # UUID de la sesion (no el nombre)
+WHATSAPP_PROVIDER_WEBHOOK_SECRET=...   # produccion: HMAC SHA-256
+```
+
+Ver `docs/OPENWA.md` para la guía completa de setup del gateway.
+
+---
+
 ## Exponer a Internet (Webhook)
 
-Meta requiere una URL publica con HTTPS para el webhook.
+Ambos proveedores requieren una URL pública con HTTPS para recibir webhooks.
 
 ### Opcion A: Cloudflare Tunnel (gratis, rapido)
 
@@ -69,16 +104,14 @@ Meta requiere una URL publica con HTTPS para el webhook.
 # Instalar cloudflared
 sudo apt-get install -y cloudflared
 
-# Crear tunnel temporal
+# Crear tunnel temporal (apunta al puerto de Shanti)
 cloudflared tunnel --url http://localhost:3000
 
 # Te dara una URL tipo:
 # https://abc123.trycloudflare.com
 ```
 
-Configura en Meta:
-- **Callback URL**: `https://abc123.trycloudflare.com/api/v1/webhooks/whatsapp`
-- **Verify Token**: el mismo valor de `WHATSAPP_VERIFY_TOKEN`
+Usa `https://abc123.trycloudflare.com/api/v1/webhooks/whatsapp` como URL de webhook en el proveedor.
 
 ### Opcion B: Hosting en la nube (produccion)
 
