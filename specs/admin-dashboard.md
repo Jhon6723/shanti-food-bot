@@ -1019,3 +1019,213 @@ const { data: orders = [], isLoading } = useQuery({
 - Pantalla `MenuPage` en admin panel con gestión de categorías
 - Productos desactivados no aparecen en el menú del bot de WhatsApp
 - Precios editables en tiempo real (pedidos futuros usan nuevo precio)
+
+## 18. Planificado para v1.6 — Reporte de Ingresos (DIAN) en StatsPage
+
+Extender la pantalla `StatsPage` existente con un panel de reporte de ventas descargable, útil para declaración de renta/IVA ante la DIAN. No se crea pantalla nueva — el reporte vive como una sección adicional dentro de la pestaña "Stats".
+
+### Filtros disponibles
+
+| Filtro | Opciones | Default |
+|--------|----------|---------|
+| Período | Día, Semana, Mes, Año, Rango personalizado | Mes |
+| Fecha inicio | date picker | primer día del mes actual |
+| Fecha fin | date picker | hoy |
+| Estado de orden | delivered, cancelled, all | delivered |
+| Tipo de orden | delivery, pickup, all | all |
+| Método de pago | cash, nequi, all | all |
+
+### Datos del reporte
+
+```typescript
+interface SalesReport {
+  period: { from: string; to: string };
+  summary: {
+    totalOrders: number;
+    totalRevenue: number;
+    totalDeliveryFees: number;
+    averageOrderValue: number;
+    byPaymentMethod: { method: 'cash' | 'nequi'; count: number; revenue: number }[];
+    byOrderType: { type: 'delivery' | 'pickup'; count: number; revenue: number }[];
+    byDay: { date: string; count: number; revenue: number }[];
+  };
+  orders: Array<{
+    id: string;
+    date: string;
+    customer: string;
+    total: number;
+    paymentMethod: string;
+    type: string;
+    status: string;
+  }>;
+}
+```
+
+### Endpoints
+
+**`GET /api/v1/orders/reports/sales`**
+
+Query params:
+| Param | Tipo | Requerido | Default | Descripción |
+|-------|------|-----------|---------|-------------|
+| `from` | string (YYYY-MM-DD) | sí | — | Fecha inicio del reporte |
+| `to` | string (YYYY-MM-DD) | sí | — | Fecha fin del reporte |
+| `status` | string | no | `delivered` | Estado de la orden (pending, confirmed, preparing, ready, delivered, cancelled, all) |
+| `paymentMethod` | string | no | `all` | Método de pago (cash, nequi, all) |
+| `type` | string | no | `all` | Tipo de orden (delivery, pickup, all) |
+| `page` | number | no | `1` | Página de resultados |
+| `limit` | number | no | `10` | Órdenes por página (max 50) |
+
+Respuesta:
+```json
+{
+  "summary": {
+    "totalOrders": 24,
+    "totalRevenue": 580000,
+    "totalDeliveryFees": 72000,
+    "averageOrderValue": 24167,
+    "byPaymentMethod": [
+      { "method": "cash", "count": 14, "revenue": 320000 },
+      { "method": "nequi", "count": 10, "revenue": 260000 }
+    ],
+    "byOrderType": [
+      { "type": "delivery", "count": 18, "revenue": 508000 },
+      { "type": "pickup", "count": 6, "revenue": 72000 }
+    ],
+    "byDay": [
+      { "date": "2026-06-17", "count": 2, "revenue": 57000 }
+    ]
+  },
+  "orders": [
+    {
+      "id": "SH-042",
+      "date": "2026-06-17T14:30:00Z",
+      "customer": "Juan Perez",
+      "total": 25000,
+      "paymentMethod": "cash",
+      "type": "delivery",
+      "status": "delivered"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "total": 24,
+    "totalPages": 3
+  }
+}
+```
+
+**`POST /api/v1/orders/reports/export`**
+
+Body:
+```json
+{
+  "format": "csv",
+  "filters": {
+    "from": "2026-06-01",
+    "to": "2026-06-30",
+    "status": "delivered",
+    "paymentMethod": "all",
+    "type": "all"
+  }
+}
+```
+
+Respuesta (descarga directa):
+- `format: 'csv'` → `Content-Type: text/csv; attachment` con **todas** las órdenes del período (sin paginación), formato para auditoría detallada en Excel
+- `format: 'pdf'` → `Content-Type: application/pdf; attachment` con **solo resumen** (2 páginas max), formato para presentación a contador/DIAN
+
+> **Nota:** El CSV devuelve todas las órdenes del período sin paginación. El PDF es solo resumen ejecutivo para evitar archivos de cientos de páginas cuando el negocio crezca.
+
+### Formato de exportación
+
+**CSV:**
+```csv
+Fecha,Orden,Cliente,Total,Metodo,Tipo,Estado
+2026-06-17,SH-042,Juan Perez,25000,cash,delivery,delivered
+```
+
+**PDF (resumen ejecutivo, 2 páginas máx):**
+- Encabezado: "Arrocería Shanti — Reporte de Ventas" + rango de fechas
+- Tabla resumen con totales (órdenes, ingresos, ticket promedio, delivery fees)
+- Desglose por método de pago (efectivo vs Nequi)
+- Desglose por tipo de orden (delivery vs pickup)
+- Gráfico de barras: ingresos por día del período
+- Pie de página con fecha de generación
+
+> El PDF **no incluye** tabla detallada de órdenes individuales. Use CSV para el detalle completo.
+
+### Wireframe: Reporte de Ingresos en StatsPage
+
+```
+┌─────────────────────────────┐
+│ 📊 Estadísticas              │
+├─────────────────────────────┤
+│ ┌─────────────────────────┐ │
+│ │  Hoy   │   Reporte 📈  │ │  ← toggle tabs
+│ └─────────────────────────┘ │
+├─────────────────────────────┤
+│  📅 Junio 2026              │
+│  Del 01/06 al 30/06       │
+├─────────────────────────────┤
+│ 💰 Total ventas    │ 24 ord │
+│    $580.000        │ $24.2k │
+├─────────────────────────────┤
+│ 💵 Efectivo  │ 💳 Nequi    │
+│   $320.000   │  $260.000   │
+├─────────────────────────────┤
+│ 📦 Delivery  │ 🏠 Pickup   │
+│   18 ord     │   6 ord     │
+├─────────────────────────────┤
+│ 📈 Ingresos por día:       │
+│ ▓▓▓▓▓▓░░░░░  $45k lun     │
+│ ▓▓▓▓▓░░░░░░  $38k mar     │
+│ ▓▓▓▓▓▓▓░░░░  $62k mié     │
+│ ▓▓▓░░░░░░░░  $28k jue     │
+├─────────────────────────────┤
+│ Detalle de órdenes (1-10): │
+│ • SH-042 — $25.000 — 17/06 │
+│ • SH-041 — $32.000 — 17/06 │
+│ • SH-038 — $18.000 — 16/06 │
+│ • SH-037 — $42.000 — 15/06 │
+│ • SH-036 — $19.000 — 15/06 │
+│ • SH-035 — $28.000 — 14/06 │
+│ • SH-034 — $35.000 — 14/06 │
+│ • SH-033 — $22.000 — 13/06 │
+│ • SH-032 — $30.000 — 13/06 │
+│ • SH-031 — $17.000 — 12/06 │
+│   ┌─────────────────────┐   │
+│   │  ← 1 de 3  →       │   │  ← paginación
+│   └─────────────────────┘   │
+├─────────────────────────────┤
+│ [📄 CSV]  [📄 PDF]  [🖨️]   │
+├─────────────────────────────┤
+│ 📋Pedidos│📊Stats│🛵Equipo│🍚Menú│
+└─────────────────────────────┘
+```
+
+### Integración en StatsPage
+
+La pestaña "Stats" tiene dos modos visibles mediante un toggle o tabs secundarios:
+
+**Modo "Hoy" (vista actual):**
+- Cards de resumen del día (total, pending, confirmed, etc.)
+- Sin cambios respecto a v1.5
+
+**Modo "Reporte" (nuevo):**
+- Selector de período con tabs (Día/Semana/Mes/Año/Custom)
+- Date pickers para rango personalizado
+- Filtros rápidos (estado, método de pago, tipo de orden)
+- Cards de resumen del período filtrado (total ventas, # órdenes, ticket promedio, delivery fees)
+- Gráfico de barras simple: ingresos por día dentro del rango
+- Tabla de órdenes con scroll
+- Botón "Exportar CSV" y "Exportar PDF" (descarga directa del navegador)
+- Botón "Imprimir" (abre `window.print()` con estilos optimizados)
+
+### Notas
+
+- Solo accesible para rol `admin`
+- Las órdenes canceladas pueden excluirse del reporte por defecto
+- La fecha de referencia es `created_at` (fecha de creación de la orden)
+- `todayRevenue` del dashboard actual se mantiene pero usa `delivered_at` cuando exista
