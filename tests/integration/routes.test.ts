@@ -32,6 +32,7 @@ vi.mock('../../src/infrastructure/repositories/OrderRepository.js', () => {
         totalRevenue: 58000,
         totalDeliveryFees: 6000,
         averageOrderValue: 29000,
+        cancelledOrders: 0,
         byPaymentMethod: [{ method: 'cash', count: 2, revenue: 58000 }],
         byOrderType: [{ type: 'delivery', count: 2, revenue: 58000 }],
         byDay: [{ date: '2024-06-01', count: 2, revenue: 58000 }],

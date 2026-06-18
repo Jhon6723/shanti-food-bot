@@ -82,6 +82,7 @@ export interface SalesSummary {
   totalRevenue: number;
   totalDeliveryFees: number;
   averageOrderValue: number;
+  cancelledOrders: number;
   byPaymentMethod: Array<{ method: string; count: number; revenue: number }>;
   byOrderType: Array<{ type: string; count: number; revenue: number }>;
   byDay: Array<{ date: string; count: number; revenue: number }>;

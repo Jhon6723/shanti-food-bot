@@ -35,6 +35,7 @@ export interface SalesSummary {
   totalRevenue: number;
   totalDeliveryFees: number;
   averageOrderValue: number;
+  cancelledOrders: number;
   byPaymentMethod: Array<{ method: string; count: number; revenue: number }>;
   byOrderType: Array<{ type: string; count: number; revenue: number }>;
   byDay: Array<{ date: string; count: number; revenue: number }>;
@@ -352,6 +353,12 @@ export class OrderRepository {
       params
     );
 
+    // Cancelled count for audit (ignores status filter)
+    const cancelledRow = await queryOne<{ count: string }>(
+      `SELECT COUNT(*) as count FROM orders WHERE created_at::date >= $1 AND created_at::date <= $2 AND status = 'cancelled'`,
+      [from, to]
+    );
+
     const total = parseInt(countRow?.count ?? '0', 10);
 
     const summary: SalesSummary = {
@@ -359,6 +366,7 @@ export class OrderRepository {
       totalRevenue: parseInt(totalsRow?.total_revenue ?? '0', 10),
       totalDeliveryFees: parseInt(totalsRow?.total_delivery_fees ?? '0', 10),
       averageOrderValue: Math.round(parseFloat(totalsRow?.average_order_value ?? '0')),
+      cancelledOrders: parseInt(cancelledRow?.count ?? '0', 10),
       byPaymentMethod: paymentRows.map((r) => ({
         method: r.method,
         count: parseInt(r.count, 10),

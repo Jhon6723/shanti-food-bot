@@ -91,11 +91,12 @@ function TodayView() {
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <MetricCard icon="💰" label="Ventas hoy" value={formatCOP(stats.todayRevenue)} highlight />
         <MetricCard icon="📦" label="Entregados" value={stats.delivered.toString()} />
         <MetricCard icon="⏳" label="Pendientes" value={stats.pending.toString()} warning={stats.pending > 0} />
         <MetricCard icon="🍳" label="En proceso" value={(stats.confirmed + stats.preparing + stats.ready).toString()} />
+        <MetricCard icon="❌" label="Cancelados" value={stats.cancelled.toString()} warning={stats.cancelled > 0} />
       </div>
 
       <div className="bg-white rounded-2xl p-4 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
@@ -231,11 +232,12 @@ function ReportView() {
       {report && (
         <>
           {/* Summary cards */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <MetricCard icon="💰" label="Total ventas" value={formatCOP(report.summary.totalRevenue)} highlight />
             <MetricCard icon="📦" label="Órdenes" value={report.summary.totalOrders.toString()} />
             <MetricCard icon="📊" label="Ticket promedio" value={formatCOP(report.summary.averageOrderValue)} />
             <MetricCard icon="🛵" label="Envíos" value={formatCOP(report.summary.totalDeliveryFees)} />
+            <MetricCard icon="❌" label="Cancelados" value={report.summary.cancelledOrders.toString()} warning={report.summary.cancelledOrders > 0} />
           </div>
 
           {/* Breakdown */}
