@@ -1,12 +1,21 @@
 // API Routes: Orders — implements specs/openapi.yaml
 
 import { Router, type Request, type Response } from 'express';
+import PDFDocument from 'pdfkit';
 import { Order } from '../../domain/models/Order.js';
 import { getProductById } from '../../domain/models/Product.js';
 import { orderRepository } from '../../infrastructure/repositories/OrderRepository.js';
 import { sendWhatsAppMessage } from '../../infrastructure/whatsapp/WhatsAppSender.js';
 import type { OrderRequestData, OrderStatus } from '../../types/index.js';
 import { requireJWT, requireRole } from '../middleware/auth.js';
+
+function formatCurrency(value: number): string {
+  return '$' + value.toLocaleString('es-CO');
+}
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('es-CO');
+}
 
 const router = Router();
 
@@ -191,6 +200,148 @@ router.patch('/:id', requireJWT, async (req: Request, res: Response) => {
     res.json(order.toJSON());
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
+  }
+});
+
+// GET /orders/reports/sales — Sales report with pagination (admin only)
+router.get('/reports/sales', requireJWT, requireRole('admin'), async (req: Request, res: Response) => {
+  try {
+    const { from, to, status, paymentMethod, type, page, limit } = req.query;
+
+    if (!from || !to) {
+      return res.status(400).json({ error: 'from and to dates are required' });
+    }
+
+    const report = await orderRepository.getSalesReport({
+      from: String(from),
+      to: String(to),
+      status: status ? String(status) : undefined,
+      paymentMethod: paymentMethod ? String(paymentMethod) : undefined,
+      type: type ? String(type) : undefined,
+      page: page ? parseInt(String(page), 10) : undefined,
+      limit: limit ? parseInt(String(limit), 10) : undefined,
+    });
+
+    res.json(report);
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+// POST /orders/reports/export — Export CSV or PDF (admin only)
+router.post('/reports/export', requireJWT, requireRole('admin'), async (req: Request, res: Response) => {
+  try {
+    const { format, filters } = req.body as {
+      format: 'csv' | 'pdf';
+      filters: { from: string; to: string; status?: string; paymentMethod?: string; type?: string };
+    };
+
+    if (!format || !filters || !filters.from || !filters.to) {
+      return res.status(400).json({ error: 'format and filters (from, to) are required' });
+    }
+
+    const report = await orderRepository.getSalesReport({
+      ...filters,
+      page: 1,
+      limit: 99999,
+    });
+
+    if (format === 'csv') {
+      const lines = [
+        'Fecha,Orden,Cliente,Total,Metodo,Tipo,Estado',
+        ...report.orders.map((o) =>
+          [
+            formatDate(o.date),
+            o.id,
+            `"${o.customer}"`,
+            o.total,
+            o.paymentMethod,
+            o.type,
+            o.status,
+          ].join(',')
+        ),
+      ];
+      const csv = lines.join('\n');
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="ventas-${filters.from}-${filters.to}.csv"`);
+      res.send(csv);
+      return;
+    }
+
+    if (format === 'pdf') {
+      const doc = new PDFDocument({ margin: 40 });
+      const chunks: Buffer[] = [];
+
+      doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+      doc.on('end', () => {
+        const pdf = Buffer.concat(chunks);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="ventas-${filters.from}-${filters.to}.pdf"`);
+        res.send(pdf);
+      });
+
+      // Header
+      doc.fontSize(18).text('Arrocería Shanti', 40, 40);
+      doc.fontSize(12).text(`Reporte de Ventas — ${formatDate(filters.from)} a ${formatDate(filters.to)}`, 40, 65);
+      doc.moveDown(2);
+
+      // Summary table
+      const summary = report.summary;
+      doc.fontSize(11).text('Resumen', 40, doc.y);
+      doc.moveDown(0.5);
+
+      const drawRow = (label: string, value: string) => {
+        doc.fontSize(10).text(label, 40, doc.y, { width: 200 });
+        doc.text(value, 240, doc.y - 12, { width: 200, align: 'right' });
+        doc.moveDown(0.3);
+      };
+
+      drawRow('Total órdenes:', String(summary.totalOrders));
+      drawRow('Ingresos totales:', formatCurrency(summary.totalRevenue));
+      drawRow('Tarifas de envío:', formatCurrency(summary.totalDeliveryFees));
+      drawRow('Ticket promedio:', formatCurrency(summary.averageOrderValue));
+      doc.moveDown(1);
+
+      // By payment method
+      if (summary.byPaymentMethod.length > 0) {
+        doc.fontSize(11).text('Por método de pago', 40, doc.y);
+        doc.moveDown(0.5);
+        for (const row of summary.byPaymentMethod) {
+          drawRow(row.method === 'cash' ? 'Efectivo' : 'Nequi', `${row.count} — ${formatCurrency(row.revenue)}`);
+        }
+        doc.moveDown(1);
+      }
+
+      // By order type
+      if (summary.byOrderType.length > 0) {
+        doc.fontSize(11).text('Por tipo de orden', 40, doc.y);
+        doc.moveDown(0.5);
+        for (const row of summary.byOrderType) {
+          drawRow(row.type === 'delivery' ? 'Domicilio' : 'Recoger', `${row.count} — ${formatCurrency(row.revenue)}`);
+        }
+        doc.moveDown(1);
+      }
+
+      // By day
+      if (summary.byDay.length > 0) {
+        doc.fontSize(11).text('Ingresos por día', 40, doc.y);
+        doc.moveDown(0.5);
+        for (const row of summary.byDay) {
+          drawRow(formatDate(row.date), `${row.count} — ${formatCurrency(row.revenue)}`);
+        }
+      }
+
+      // Footer
+      doc.fontSize(8).text(`Generado el ${new Date().toLocaleString('es-CO')}`, 40, doc.page.height - 60, { align: 'center' });
+
+      doc.end();
+      return;
+    }
+
+    res.status(400).json({ error: "format must be 'csv' or 'pdf'" });
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
   }
 });
 

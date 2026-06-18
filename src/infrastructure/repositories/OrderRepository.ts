@@ -10,6 +10,47 @@ export interface OrderFilters {
   customerPhone?: string;
 }
 
+export interface SalesReportFilters {
+  from: string;
+  to: string;
+  status?: string;
+  paymentMethod?: string;
+  type?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface SalesReportOrder {
+  id: string;
+  date: string;
+  customer: string;
+  total: number;
+  paymentMethod: string;
+  type: string;
+  status: string;
+}
+
+export interface SalesSummary {
+  totalOrders: number;
+  totalRevenue: number;
+  totalDeliveryFees: number;
+  averageOrderValue: number;
+  byPaymentMethod: Array<{ method: string; count: number; revenue: number }>;
+  byOrderType: Array<{ type: string; count: number; revenue: number }>;
+  byDay: Array<{ date: string; count: number; revenue: number }>;
+}
+
+export interface SalesReportResult {
+  summary: SalesSummary;
+  orders: SalesReportOrder[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
 interface OrderRow {
   id: string;
   customer_name: string;
@@ -214,6 +255,146 @@ export class OrderRepository {
       delivered: byStatus.get('delivered') ?? 0,
       cancelled: byStatus.get('cancelled') ?? 0,
       todayRevenue: parseInt(todayRevenueRow?.sum ?? '0', 10),
+    };
+  }
+
+  async getSalesReport(filters: SalesReportFilters): Promise<SalesReportResult> {
+    const { from, to, status, paymentMethod, type } = filters;
+    const page = filters.page ?? 1;
+    const limit = Math.min(filters.limit ?? 10, 50);
+    const offset = (page - 1) * limit;
+
+    // Build dynamic WHERE clause
+    const conditions = [
+      `created_at::date >= $1`,
+      `created_at::date <= $2`,
+    ];
+    const params: unknown[] = [from, to];
+    let paramIdx = 3;
+
+    if (status && status !== 'all') {
+      conditions.push(`status = $${paramIdx++}`);
+      params.push(status);
+    }
+    if (paymentMethod && paymentMethod !== 'all') {
+      conditions.push(`payment_method = $${paramIdx++}`);
+      params.push(paymentMethod);
+    }
+    if (type && type !== 'all') {
+      conditions.push(`type = $${paramIdx++}`);
+      params.push(type);
+    }
+
+    const where = conditions.join(' AND ');
+
+    // Summary totals
+    const totalsRow = await queryOne<{
+      total_orders: string;
+      total_revenue: string | null;
+      total_delivery_fees: string | null;
+      average_order_value: string | null;
+    }>(
+      `SELECT COUNT(*) as total_orders, SUM(total) as total_revenue,
+              SUM(delivery_fee) as total_delivery_fees, AVG(total) as average_order_value
+       FROM orders WHERE ${where}`,
+      params
+    );
+
+    // By payment method
+    const paymentRows = await query<{
+      method: string;
+      count: string;
+      revenue: string | null;
+    }>(
+      `SELECT payment_method as method, COUNT(*) as count, SUM(total) as revenue
+       FROM orders WHERE ${where}
+       GROUP BY payment_method`,
+      params
+    );
+
+    // By order type
+    const typeRows = await query<{
+      type: string;
+      count: string;
+      revenue: string | null;
+    }>(
+      `SELECT type, COUNT(*) as count, SUM(total) as revenue
+       FROM orders WHERE ${where}
+       GROUP BY type`,
+      params
+    );
+
+    // By day
+    const dayRows = await query<{
+      date: string;
+      count: string;
+      revenue: string | null;
+    }>(
+      `SELECT created_at::date as date, COUNT(*) as count, SUM(total) as revenue
+       FROM orders WHERE ${where}
+       GROUP BY created_at::date
+       ORDER BY date`,
+      params
+    );
+
+    // Paginated orders
+    const orderRows = await query<OrderRow>(
+      `SELECT id, customer_name, created_at, total, payment_method, type, status
+       FROM orders WHERE ${where}
+       ORDER BY created_at DESC
+       LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
+      [...params, limit, offset]
+    );
+
+    // Total count for pagination
+    const countRow = await queryOne<{ count: string }>(
+      `SELECT COUNT(*) as count FROM orders WHERE ${where}`,
+      params
+    );
+
+    const total = parseInt(countRow?.count ?? '0', 10);
+
+    const summary: SalesSummary = {
+      totalOrders: parseInt(totalsRow?.total_orders ?? '0', 10),
+      totalRevenue: parseInt(totalsRow?.total_revenue ?? '0', 10),
+      totalDeliveryFees: parseInt(totalsRow?.total_delivery_fees ?? '0', 10),
+      averageOrderValue: Math.round(parseFloat(totalsRow?.average_order_value ?? '0')),
+      byPaymentMethod: paymentRows.map((r) => ({
+        method: r.method,
+        count: parseInt(r.count, 10),
+        revenue: parseInt(r.revenue ?? '0', 10),
+      })),
+      byOrderType: typeRows.map((r) => ({
+        type: r.type,
+        count: parseInt(r.count, 10),
+        revenue: parseInt(r.revenue ?? '0', 10),
+      })),
+      byDay: dayRows.map((r) => ({
+        date: r.date,
+        count: parseInt(r.count, 10),
+        revenue: parseInt(r.revenue ?? '0', 10),
+      })),
+    };
+
+    const orders: SalesReportOrder[] = orderRows.map((r) => ({
+      id: r.id,
+      date: r.created_at,
+      customer: r.customer_name,
+      total: r.total,
+      paymentMethod: r.payment_method,
+      type: r.type,
+      status: r.status,
+    }));
+
+    return {
+      summary,
+      orders,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
     };
   }
 

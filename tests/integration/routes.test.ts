@@ -26,6 +26,22 @@ vi.mock('../../src/infrastructure/repositories/OrderRepository.js', () => {
       total: 0, pending: 0, confirmed: 0, preparing: 0,
       ready: 0, delivered: 0, cancelled: 0, todayRevenue: 0,
     }),
+    getSalesReport: vi.fn().mockResolvedValue({
+      summary: {
+        totalOrders: 2,
+        totalRevenue: 58000,
+        totalDeliveryFees: 6000,
+        averageOrderValue: 29000,
+        byPaymentMethod: [{ method: 'cash', count: 2, revenue: 58000 }],
+        byOrderType: [{ type: 'delivery', count: 2, revenue: 58000 }],
+        byDay: [{ date: '2024-06-01', count: 2, revenue: 58000 }],
+      },
+      orders: [
+        { id: 'SH-001', date: '2024-06-01T10:00:00Z', customer: 'Ana', total: 28000, paymentMethod: 'cash', type: 'delivery', status: 'delivered' },
+        { id: 'SH-002', date: '2024-06-01T11:00:00Z', customer: 'Luis', total: 30000, paymentMethod: 'cash', type: 'delivery', status: 'delivered' },
+      ],
+      pagination: { page: 1, limit: 10, total: 2, totalPages: 1 },
+    }),
   };
   return { orderRepository: mockRepo, OrderRepository: vi.fn(() => mockRepo) };
 });
@@ -279,6 +295,85 @@ describe('GET /api/v1/orders/stats/dashboard', () => {
       delivered: expect.any(Number),
       todayRevenue: expect.any(Number),
     });
+  });
+});
+
+describe('GET /api/v1/orders/reports/sales', () => {
+  it('returns 401 without token', async () => {
+    const res = await request(app).get('/api/v1/orders/reports/sales?from=2024-06-01&to=2024-06-30');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for delivery role', async () => {
+    const res = await request(app)
+      .get('/api/v1/orders/reports/sales?from=2024-06-01&to=2024-06-30')
+      .set('Authorization', `Bearer ${makeToken('delivery')}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 400 when from/to missing', async () => {
+    const res = await request(app)
+      .get('/api/v1/orders/reports/sales')
+      .set('Authorization', `Bearer ${makeToken('admin')}`);
+    expect(res.status).toBe(400);
+  });
+
+  it('admin: returns 200 with report object', async () => {
+    const res = await request(app)
+      .get('/api/v1/orders/reports/sales?from=2024-06-01&to=2024-06-30&status=delivered')
+      .set('Authorization', `Bearer ${makeToken('admin')}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('summary');
+    expect(res.body).toHaveProperty('orders');
+    expect(res.body).toHaveProperty('pagination');
+    expect(res.body.summary.totalOrders).toBe(2);
+  });
+});
+
+describe('POST /api/v1/orders/reports/export', () => {
+  it('returns 401 without token', async () => {
+    const res = await request(app)
+      .post('/api/v1/orders/reports/export')
+      .send({ format: 'csv', filters: { from: '2024-06-01', to: '2024-06-30' } });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for delivery role', async () => {
+    const res = await request(app)
+      .post('/api/v1/orders/reports/export')
+      .set('Authorization', `Bearer ${makeToken('delivery')}`)
+      .send({ format: 'csv', filters: { from: '2024-06-01', to: '2024-06-30' } });
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 400 when format or filters missing', async () => {
+    const res = await request(app)
+      .post('/api/v1/orders/reports/export')
+      .set('Authorization', `Bearer ${makeToken('admin')}`)
+      .send({ format: 'csv' });
+    expect(res.status).toBe(400);
+  });
+
+  it('admin: exports CSV with attachment headers', async () => {
+    const res = await request(app)
+      .post('/api/v1/orders/reports/export')
+      .set('Authorization', `Bearer ${makeToken('admin')}`)
+      .send({ format: 'csv', filters: { from: '2024-06-01', to: '2024-06-30' } });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/csv');
+    expect(res.headers['content-disposition']).toContain('attachment');
+    expect(res.text).toContain('Fecha,Orden,Cliente');
+  });
+
+  it('admin: exports PDF with attachment headers', async () => {
+    const res = await request(app)
+      .post('/api/v1/orders/reports/export')
+      .set('Authorization', `Bearer ${makeToken('admin')}`)
+      .send({ format: 'pdf', filters: { from: '2024-06-01', to: '2024-06-30' } });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toBe('application/pdf');
+    expect(res.headers['content-disposition']).toContain('attachment');
+    expect(res.body.length).toBeGreaterThan(0);
   });
 });
 
