@@ -56,4 +56,5 @@ export interface WhatsAppWebhookPayload {
   type: string;
   text?: { body: string };
   interactive?: WhatsAppMessage['interactive'];
+  chatId?: string; // Original JID (e.g. 123@lid vs 123@c.us) for reply routing
 }

@@ -1,8 +1,9 @@
 // Entry point: Shanti Food WhatsApp Bot API
 // Spec Driven Development implementation
 
+import './config/env.js';
+
 import cors from 'cors';
-import dotenv from 'dotenv';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { join } from 'path';
 import { initDatabase, pool } from './infrastructure/database/connection.js';
@@ -13,8 +14,6 @@ import ordersRouter from './api/routes/orders.js';
 import productsRouter from './api/routes/products.js';
 import usersRouter from './api/routes/users.js';
 import webhookRouter from './api/routes/webhook.js';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -116,8 +115,10 @@ async function startServer() {
 
   app.listen(PORT, () => {
     const isDev = process.env.NODE_ENV !== 'production';
+    const whatsappProvider = process.env.WHATSAPP_PROVIDER || 'meta';
     console.log(`
 🍚 Arrocería Shanti API running on port ${PORT}
+📱 WhatsApp Provider: ${whatsappProvider.toUpperCase()}
 
 API Endpoints:
   • GET  /health                    - Health check

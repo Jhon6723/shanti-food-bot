@@ -3,7 +3,7 @@
 import bcrypt from 'bcrypt';
 import { Pool } from 'pg';
 
-const connectionString = process.env.DATABASE_URL ?? 'postgres://shanti:shanti123@localhost:5432/shanti_food';
+const connectionString = process.env.DATABASE_URL;
 
 // Disable SSL for local/internal hosts; enable only for real production platforms
 const isLocalOrDocker =
