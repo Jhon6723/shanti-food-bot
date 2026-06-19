@@ -158,10 +158,13 @@ interface WhatsAppWebhookPayload {
     "from": "178327646171353@lid",
     "body": "Hola, quiero un arroz",
     "type": "text",
-    "isLidSender": true
+    "isLidSender": true,
+    "senderPhone": "573123456789"
   }
 }
 ```
+
+> **Nota sobre LID → Phone:** OpenWA puede enviar `@lid` (Line ID) cuando el remitente no está en contactos. Si configuras `RESOLVE_LID_TO_PHONE=true` en OpenWA, el payload incluye `senderPhone` con el número real. El adapter usa `senderPhone` como `from` cuando está presente; de lo contrario, cae al LID crudo (útil para sesión conversacional pero no para guardar en DB).
 
 **Formato de salida (OpenWA):**
 ```json

@@ -17,6 +17,10 @@ interface OpenWAWebhookBody {
     body?: string;
     type?: string;
     fromMe?: boolean;
+    /** Resolved phone number when OpenWA's RESOLVE_LID_TO_PHONE=true (MSISDN digits or null) */
+    senderPhone?: string | null;
+    /** True when the sender is identified by a WhatsApp privacy id (@lid) */
+    isLidSender?: boolean;
   };
 }
 
@@ -35,10 +39,19 @@ export class OpenWAAdapter implements WhatsAppAdapter {
     // Ignore messages sent by us
     if (data.fromMe) return [];
 
-    // OpenWA JIDs look like "573123456789@c.us"
+    // OpenWA JIDs look like "573123456789@c.us" or "178327646171353@lid"
+    // When OpenWA has RESOLVE_LID_TO_PHONE=true, senderPhone carries the real MSISDN
     const rawId = data.from ?? data.chatId ?? '';
-    const phone = rawId.split('@')[0].replace(/\D/g, '');
+    const resolvedPhone = data.senderPhone?.replace(/\D/g, '') ?? '';
+    const phone = resolvedPhone || rawId.split('@')[0].replace(/\D/g, '');
     const chatId = data.chatId ?? rawId; // preserve original chatId (lid vs c.us)
+
+    if (data.isLidSender && resolvedPhone) {
+      console.log(`[OpenWAAdapter] Resolved LID ${rawId} → phone ${resolvedPhone}`);
+    } else if (data.isLidSender) {
+      console.warn(`[OpenWAAdapter] Received LID sender without resolved phone. Set RESOLVE_LID_TO_PHONE=true in OpenWA.`);
+    }
+
     if (!phone) return [];
 
     return [{

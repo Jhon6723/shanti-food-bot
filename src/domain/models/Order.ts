@@ -141,7 +141,16 @@ export class Customer {
 
   private normalizePhone(phone: string): string {
     const digits = phone.replace(/\D/g, '');
-    return digits.startsWith('57') ? `+${digits}` : `+57${digits}`;
+    // Already has Colombian country code
+    if (digits.startsWith('57')) {
+      return `+${digits}`;
+    }
+    // Colombian mobile number (10 digits starting with 3)
+    if (digits.length === 10 && digits.startsWith('3')) {
+      return `+57${digits}`;
+    }
+    // International or unknown - just add + without forcing Colombian prefix
+    return `+${digits}`;
   }
 
   toJSON(): { name: string; phone: string } {
