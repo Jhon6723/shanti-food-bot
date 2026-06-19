@@ -53,6 +53,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - default
+      - openwa-network
 
 volumes:
   postgres_data:
+
+networks:
+  openwa-network:
+    external: true

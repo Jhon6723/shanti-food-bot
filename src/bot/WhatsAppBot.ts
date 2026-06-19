@@ -99,7 +99,8 @@ export class WhatsAppBot {
     if (text === 'hola' || text === 'inicio' || text === 'empezar') {
       session.reset();
       const savedName = await this.repo.getCustomerNameByPhone(from);
-      if (savedName) {
+      // 'Cliente' is a fallback placeholder, not a real saved name
+      if (savedName && savedName.trim().toLowerCase() !== 'cliente') {
         session.customerName = savedName;
         return `¡Hola de nuevo, *${savedName}*! 🍚\n\n¿Qué deseas ordenar hoy?\n\n1️⃣ Ver menú completo\n2️⃣ Hacer pedido rápido\n3️⃣ Estado de mi pedido\n4️⃣ Hablar con alguien\n\nResponde con el número de la opción.`;
       }

@@ -87,6 +87,15 @@ describe('WhatsAppBot — welcome flow', () => {
     expect(res).toContain('Hola de nuevo');
   });
 
+  it('treats "Cliente" as unknown and asks for name (regression #lid)', async () => {
+    repo = makeRepo({ getCustomerNameByPhone: vi.fn().mockResolvedValue('Cliente') });
+    bot = new WhatsAppBot(repo);
+    await bot.handleMessage(PHONE, msg('hola'));
+    const res = await bot.handleMessage(PHONE, msg('2'));
+    expect(res).toContain('nombre');
+    expect(res).not.toContain('MENÚ');
+  });
+
   it('responds with welcome on unknown input when no session', async () => {
     const res = await bot.handleMessage(PHONE, msg('xkcd'));
     expect(res).toContain('Bienvenido');
