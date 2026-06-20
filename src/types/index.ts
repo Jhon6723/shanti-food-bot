@@ -17,6 +17,7 @@ export type ProductCategory = 'arroz_chino' | 'bandeja_paisa' | 'bebidas' | 'otr
 export interface CustomerData {
   name: string;
   phone: string;
+  chatId?: string; // Original WhatsApp JID (e.g. 123@lid) for reply routing
 }
 
 export interface OrderItemData {

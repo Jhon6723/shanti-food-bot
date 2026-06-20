@@ -2,12 +2,12 @@
 // Implements the OrderRepositoryPort from Application.
 
 import type {
-  OrderFilters,
-  OrderRepositoryPort,
-  SalesReportFilters,
-  SalesReportOrder,
-  SalesReportResult,
-  SalesSummary,
+    OrderFilters,
+    OrderRepositoryPort,
+    SalesReportFilters,
+    SalesReportOrder,
+    SalesReportResult,
+    SalesSummary,
 } from '../../application/ports/OrderRepositoryPort.js';
 import { Order } from '../../domain/models/Order.js';
 import type { OrderStatus, OrderType } from '../../types/index.js';
@@ -17,6 +17,7 @@ interface OrderRow {
   id: string;
   customer_name: string;
   customer_phone: string;
+  customer_chat_id: string | null;
   type: OrderType;
   address: string | null;
   payment_method: string;
@@ -42,19 +43,21 @@ export class OrderRepository implements OrderRepositoryPort {
   async save(order: Order): Promise<Order> {
     // Insert order
     await query(
-      `INSERT INTO orders (id, customer_name, customer_phone, type, address, payment_method, status, notes, subtotal, delivery_fee, total, created_at, estimated_ready_at, delivered_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      `INSERT INTO orders (id, customer_name, customer_phone, customer_chat_id, type, address, payment_method, status, notes, subtotal, delivery_fee, total, created_at, estimated_ready_at, delivered_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
        ON CONFLICT (id) DO UPDATE SET
          status = EXCLUDED.status,
          notes = EXCLUDED.notes,
          subtotal = EXCLUDED.subtotal,
          delivery_fee = EXCLUDED.delivery_fee,
          total = EXCLUDED.total,
-         delivered_by = EXCLUDED.delivered_by`,
+         delivered_by = EXCLUDED.delivered_by,
+         customer_chat_id = EXCLUDED.customer_chat_id`,
       [
         order.id,
         order.customer.name,
         order.customer.phone,
+        order.customer.chatId ?? null,
         order.type,
         order.address ?? null,
         order.paymentMethod,
@@ -375,7 +378,7 @@ export class OrderRepository implements OrderRepositoryPort {
 
     const order = new Order({
       id: row.id,
-      customer: { name: row.customer_name, phone: row.customer_phone },
+      customer: { name: row.customer_name, phone: row.customer_phone, chatId: row.customer_chat_id ?? undefined },
       items: itemRows.map((ir) => ({
         productId: ir.product_id,
         quantity: ir.quantity,

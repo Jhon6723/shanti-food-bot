@@ -133,10 +133,12 @@ export class Order {
 export class Customer {
   name: string;
   phone: string;
+  chatId?: string;
 
   constructor(data: CustomerData) {
     this.name = data.name;
     this.phone = this.normalizePhone(data.phone);
+    this.chatId = data.chatId;
   }
 
   private normalizePhone(phone: string): string {
@@ -153,8 +155,8 @@ export class Customer {
     return `+${digits}`;
   }
 
-  toJSON(): { name: string; phone: string } {
-    return { name: this.name, phone: this.phone };
+  toJSON(): { name: string; phone: string; chatId?: string } {
+    return { name: this.name, phone: this.phone, chatId: this.chatId };
   }
 }
 

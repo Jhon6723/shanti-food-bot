@@ -4,6 +4,6 @@
 
 import { getAdapter } from './index.js';
 
-export async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
-  await getAdapter().sendMessage(to, text);
+export async function sendWhatsAppMessage(to: string, text: string, chatId?: string): Promise<void> {
+  await getAdapter().sendMessage(to, text, chatId ? { chatId } : undefined);
 }

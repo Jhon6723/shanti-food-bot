@@ -54,6 +54,7 @@ class Session {
   currentProduct: ProductRow | null = null;
   pendingItem: OrderItemData | null = null;
   customerName: string | null = null;
+  chatId: string | null = null;
   orderStatusCache: Order[] | null = null;
   orderStatusPage = 0;
 
@@ -72,6 +73,7 @@ class Session {
     this.currentProduct = null;
     this.pendingItem = null;
     this.customerName = null;
+    this.chatId = null;
     this.orderStatusCache = null;
     this.orderStatusPage = 0;
   }
@@ -89,11 +91,15 @@ export class WhatsAppBot {
 
   async handleMessage(
     rawFrom: string,
-    message: { text?: { body: string }; type?: string; interactive?: { type: string; buttonReply?: Record<string, unknown>; listReply?: Record<string, unknown> } }
+    message: { text?: { body: string }; type?: string; interactive?: { type: string; buttonReply?: Record<string, unknown>; listReply?: Record<string, unknown> } },
+    chatId?: string
   ): Promise<string> {
     // Normalize Colombian phone: 573011758999 → 3011758999
     const from = rawFrom.replace(/^57/, '').replace(/\D/g, '');
     const session = this.getOrCreateSession(from);
+    if (chatId) {
+      session.chatId = chatId;
+    }
     const text = message.text?.body.toLowerCase().trim() ?? '';
 
     if (text === 'hola' || text === 'inicio' || text === 'empezar') {
@@ -581,7 +587,7 @@ Responde con el número de la opción.`;
     }
 
     const orderData = {
-      customer: { name: session.customerName ?? 'Cliente', phone },
+      customer: { name: session.customerName ?? 'Cliente', phone, chatId: session.chatId ?? undefined },
       items: session.items,
       type: session.type!,
       address: session.address ?? undefined,

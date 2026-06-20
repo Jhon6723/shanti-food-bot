@@ -40,9 +40,10 @@ async function notifyCustomer(order: Order, status: OrderStatus): Promise<void> 
 
   const text = messageBuilder(order);
   const phone = order.customer.phone;
+  const chatId = order.customer.chatId;
 
   try {
-    await sendWhatsAppMessage(phone, text);
+    await sendWhatsAppMessage(phone, text, chatId);
   } catch {
     // fire-and-forget: don't fail the status update if WhatsApp fails
     console.error(`[orders/notify] Failed to send ${status} notification for order ${order.id}`);

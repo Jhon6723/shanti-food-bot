@@ -26,7 +26,7 @@ export class WebhookService {
           type: payload.type as 'text',
           text: payload.text,
           interactive: payload.interactive,
-        });
+        }, payload.chatId);
 
         await this.adapter.sendMessage(
           payload.from,

@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS orders (
     id            VARCHAR(50) PRIMARY KEY,
     customer_name VARCHAR(100) NOT NULL,
     customer_phone VARCHAR(20) NOT NULL,
+    customer_chat_id VARCHAR(50), -- Original WhatsApp JID (e.g. 123@lid) for reply routing
     type          VARCHAR(10) NOT NULL CHECK (type IN ('delivery', 'pickup')),
     address       TEXT,
     payment_method VARCHAR(10) NOT NULL CHECK (payment_method IN ('cash', 'nequi')),
@@ -95,6 +96,7 @@ CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 
 // Migration step 2: add new columns to orders (depends on users existing)
 const MIGRATION_ORDERS_SQL = `
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_chat_id VARCHAR(50);
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_proof_url TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_orders_delivered_by ON orders(delivered_by);
