@@ -1,7 +1,7 @@
-import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 
 export function LoginPage() {
   const { login } = useAuth();

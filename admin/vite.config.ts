@@ -34,6 +34,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      // production: https://shanti-bot.pixpro.lat
+      // local: http://localhost:3000
       '/api': 'https://shanti-bot.pixpro.lat',
     },
   },
