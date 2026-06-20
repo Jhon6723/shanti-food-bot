@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { OrderRepositoryPort } from '../../src/application/ports/OrderRepositoryPort.js';
 import { WhatsAppBot } from '../../src/bot/WhatsAppBot.js';
 import { Order } from '../../src/domain/models/Order.js';
-import type { OrderRepository } from '../../src/infrastructure/repositories/OrderRepository.js';
 
 // Mock ProductRepository to avoid DB calls
 vi.mock('../../src/infrastructure/repositories/ProductRepository.js', () => {
@@ -29,7 +29,7 @@ vi.mock('../../src/infrastructure/repositories/ProductRepository.js', () => {
 });
 
 // Minimal mock repository — no DB involved
-function makeRepo(overrides: Partial<OrderRepository> = {}): OrderRepository {
+function makeRepo(overrides: Partial<OrderRepositoryPort> = {}): OrderRepositoryPort {
   return {
     save: vi.fn().mockResolvedValue(undefined),
     findById: vi.fn().mockResolvedValue(undefined),
@@ -43,7 +43,31 @@ function makeRepo(overrides: Partial<OrderRepository> = {}): OrderRepository {
     findLastDeliveryAddress: vi.fn().mockResolvedValue(null),
     findAllPendingByCustomer: vi.fn().mockResolvedValue([]),
     ...overrides,
-  } as unknown as OrderRepository;
+  } as unknown as OrderRepositoryPort;
+}
+
+function makeProductRepo(overrides: Record<string, unknown> = {}) {
+  const mockProducts = [
+    { id: 'arroz-pollo', name: 'Arroz Chino de Pollo', category_id: 'arroz_chino', price: 18000, description: 'Arroz salteado con pollo', available: true, preparation_minutes: 20, customization_options: ['sin cebolla', 'sin pollo', 'extra picante'], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'arroz-cerdo', name: 'Arroz Chino de Cerdo', category_id: 'arroz_chino', price: 17000, description: 'Arroz salteado con cerdo', available: true, preparation_minutes: 20, customization_options: ['sin cebolla', 'sin cerdo'], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'arroz-camaron', name: 'Arroz Chino de Camarón', category_id: 'arroz_chino', price: 20000, description: 'Arroz salteado con camarón', available: true, preparation_minutes: 25, customization_options: ['sin cebolla'], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'arroz-mixto', name: 'Arroz Chino Mixto', category_id: 'arroz_chino', price: 19000, description: 'Arroz salteado mixto', available: true, preparation_minutes: 25, customization_options: ['sin cebolla'], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'arroz-vegetariano', name: 'Arroz Chino Vegetariano', category_id: 'arroz_chino', price: 16000, description: 'Arroz salteado vegetariano', available: true, preparation_minutes: 20, customization_options: ['sin cebolla', 'extra tofu'], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'arroz-pollo-pierna', name: 'Arroz Chino de Pollo (Pierna)', category_id: 'arroz_chino', price: 17500, description: 'Arroz salteado con pierna de pollo', available: true, preparation_minutes: 20, customization_options: ['sin cebolla'], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'coca-400', name: 'Coca-Cola 400ml', category_id: 'bebidas', price: 4000, description: 'Gaseosa', available: true, preparation_minutes: 0, customization_options: [], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'sprite-400', name: 'Sprite 400ml', category_id: 'bebidas', price: 4000, description: 'Gaseosa lima-limón', available: true, preparation_minutes: 0, customization_options: [], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'agua-500', name: 'Agua 500ml', category_id: 'bebidas', price: 3000, description: 'Agua natural', available: true, preparation_minutes: 0, customization_options: [], created_at: '2024-01-01', updated_at: '2024-01-01' },
+    { id: 'bandeja-paisa', name: 'Bandeja Paisa', category_id: 'bandeja_paisa', price: 22000, description: 'Bandeja paisa tradicional', available: true, preparation_minutes: 30, customization_options: ['sin huevo', 'sin chorizo', 'sin chicharrón'], created_at: '2024-01-01', updated_at: '2024-01-01' },
+  ];
+  return {
+    findAll: vi.fn().mockResolvedValue(mockProducts),
+    findById: vi.fn().mockImplementation((id: string) => Promise.resolve(mockProducts.find((p) => p.id === id))),
+    findByCategory: vi.fn().mockImplementation((categoryId: string) => Promise.resolve(mockProducts.filter((p) => p.category_id === categoryId))),
+    create: vi.fn().mockResolvedValue(mockProducts[0]),
+    update: vi.fn().mockResolvedValue(mockProducts[0]),
+    delete: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  } as unknown as import('../../src/application/ports/ProductRepositoryPort.js').ProductRepositoryPort;
 }
 
 function makeOrder(id: string, status = 'pending', type: 'delivery' | 'pickup' = 'delivery') {
@@ -66,11 +90,11 @@ const PHONE = '3001234567';
 
 describe('WhatsAppBot — welcome flow', () => {
   let bot: WhatsAppBot;
-  let repo: OrderRepository;
+  let repo: OrderRepositoryPort;
 
   beforeEach(() => {
     repo = makeRepo();
-    bot = new WhatsAppBot(repo);
+    bot = new WhatsAppBot(repo, makeProductRepo());
   });
 
   it('responds with welcome message on "hola"', async () => {
@@ -81,7 +105,7 @@ describe('WhatsAppBot — welcome flow', () => {
 
   it('greets returning customer by name', async () => {
     repo = makeRepo({ getCustomerNameByPhone: vi.fn().mockResolvedValue('María') });
-    bot = new WhatsAppBot(repo);
+    bot = new WhatsAppBot(repo, makeProductRepo());
     const res = await bot.handleMessage(PHONE, msg('hola'));
     expect(res).toContain('María');
     expect(res).toContain('Hola de nuevo');
@@ -89,7 +113,7 @@ describe('WhatsAppBot — welcome flow', () => {
 
   it('treats "Cliente" as unknown and asks for name (regression #lid)', async () => {
     repo = makeRepo({ getCustomerNameByPhone: vi.fn().mockResolvedValue('Cliente') });
-    bot = new WhatsAppBot(repo);
+    bot = new WhatsAppBot(repo, makeProductRepo());
     await bot.handleMessage(PHONE, msg('hola'));
     const res = await bot.handleMessage(PHONE, msg('2'));
     expect(res).toContain('nombre');
@@ -112,7 +136,7 @@ describe('WhatsAppBot — order flow (happy path)', () => {
   let bot: WhatsAppBot;
 
   beforeEach(() => {
-    bot = new WhatsAppBot(makeRepo());
+    bot = new WhatsAppBot(makeRepo(), makeProductRepo());
   });
 
   async function startOrder() {
@@ -218,7 +242,7 @@ describe('WhatsAppBot — order flow (happy path)', () => {
 
   it('confirms order and saves to repo', async () => {
     const repo = makeRepo();
-    bot = new WhatsAppBot(repo);
+    bot = new WhatsAppBot(repo, makeProductRepo());
     await bot.handleMessage(PHONE, msg('hola'));
     await bot.handleMessage(PHONE, msg('2'));
     await bot.handleMessage(PHONE, msg('Carlos'));
@@ -256,7 +280,7 @@ describe('WhatsAppBot — order flow (sad paths)', () => {
   let bot: WhatsAppBot;
 
   beforeEach(() => {
-    bot = new WhatsAppBot(makeRepo());
+    bot = new WhatsAppBot(makeRepo(), makeProductRepo());
   });
 
   it('does not crash when ordering a product without customization options (regression)', async () => {
@@ -434,7 +458,7 @@ describe('WhatsAppBot — navigation (0/volver/atrás)', () => {
   let bot: WhatsAppBot;
 
   beforeEach(() => {
-    bot = new WhatsAppBot(makeRepo());
+    bot = new WhatsAppBot(makeRepo(), makeProductRepo());
   });
 
   it('0 in customization step goes back to product list', async () => {
@@ -500,7 +524,7 @@ describe('WhatsAppBot — quantity label by category', () => {
   let bot: WhatsAppBot;
 
   beforeEach(() => {
-    bot = new WhatsAppBot(makeRepo());
+    bot = new WhatsAppBot(makeRepo(), makeProductRepo());
   });
 
   it('uses "porciones" for food products (arroz_chino)', async () => {
@@ -534,7 +558,7 @@ describe('WhatsAppBot — quantity label by category', () => {
 
 describe('WhatsAppBot — order status', () => {
   it('returns no active orders message when none found', async () => {
-    const bot = new WhatsAppBot(makeRepo());
+    const bot = new WhatsAppBot(makeRepo(), makeProductRepo());
     await bot.handleMessage(PHONE, msg('hola'));
     const res = await bot.handleMessage(PHONE, msg('3'));
     expect(res).toContain('No tienes pedidos activos');
@@ -552,7 +576,7 @@ describe('WhatsAppBot — order status', () => {
 
     const bot = new WhatsAppBot(makeRepo({
       findAllPendingByCustomer: vi.fn().mockResolvedValue([pendingOrder]),
-    }));
+    }), makeProductRepo());
 
     await bot.handleMessage(PHONE, msg('hola'));
     const res = await bot.handleMessage(PHONE, msg('3'));
@@ -572,7 +596,7 @@ describe('WhatsAppBot — order status', () => {
 
     const bot = new WhatsAppBot(makeRepo({
       findAllPendingByCustomer: vi.fn().mockResolvedValue([pickupOrder]),
-    }));
+    }), makeProductRepo());
 
     await bot.handleMessage(PHONE, msg('hola'));
     const res = await bot.handleMessage(PHONE, msg('3'));
@@ -580,7 +604,7 @@ describe('WhatsAppBot — order status', () => {
   });
 
   it('"estado" keyword checks order from anywhere in conversation', async () => {
-    const bot = new WhatsAppBot(makeRepo());
+    const bot = new WhatsAppBot(makeRepo(), makeProductRepo());
     const res = await bot.handleMessage(PHONE, msg('estado'));
     expect(res).toContain('No tienes pedidos activos');
   });
@@ -590,7 +614,7 @@ describe('WhatsAppBot — modify flow', () => {
   let bot: WhatsAppBot;
 
   beforeEach(() => {
-    bot = new WhatsAppBot(makeRepo());
+    bot = new WhatsAppBot(makeRepo(), makeProductRepo());
   });
 
   async function reachConfirmation() {
@@ -663,7 +687,7 @@ describe('WhatsAppBot — last address reuse', () => {
     const repo = makeRepo({
       findLastDeliveryAddress: vi.fn().mockResolvedValue('Carrera 45 #12-34'),
     });
-    const bot = new WhatsAppBot(repo);
+    const bot = new WhatsAppBot(repo, makeProductRepo());
     const res = await goToDeliveryType(bot);
     expect(res).toContain('Carrera 45 #12-34');
     expect(res).toContain('1');
@@ -674,7 +698,7 @@ describe('WhatsAppBot — last address reuse', () => {
     const repo = makeRepo({
       findLastDeliveryAddress: vi.fn().mockResolvedValue(null),
     });
-    const bot = new WhatsAppBot(repo);
+    const bot = new WhatsAppBot(repo, makeProductRepo());
     const res = await goToDeliveryType(bot);
     expect(res).toContain('dirección');
     expect(res).not.toContain('anterior');
@@ -684,7 +708,7 @@ describe('WhatsAppBot — last address reuse', () => {
     const repo = makeRepo({
       findLastDeliveryAddress: vi.fn().mockResolvedValue('Carrera 45 #12-34'),
     });
-    const bot = new WhatsAppBot(repo);
+    const bot = new WhatsAppBot(repo, makeProductRepo());
     await goToDeliveryType(bot);
     const res = await bot.handleMessage(PHONE, msg('1')); // usar dirección anterior
     expect(res).toContain('nota');
@@ -694,7 +718,7 @@ describe('WhatsAppBot — last address reuse', () => {
     const repo = makeRepo({
       findLastDeliveryAddress: vi.fn().mockResolvedValue('Carrera 45 #12-34'),
     });
-    const bot = new WhatsAppBot(repo);
+    const bot = new WhatsAppBot(repo, makeProductRepo());
     await goToDeliveryType(bot);
     const res = await bot.handleMessage(PHONE, msg('2')); // escribir nueva
     expect(res).toContain('dirección');
@@ -705,14 +729,14 @@ describe('WhatsAppBot — last address reuse', () => {
 
 describe('WhatsAppBot — order status with pagination', () => {
   it('shows no active orders message when none exist', async () => {
-    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue([]) }));
+    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue([]) }), makeProductRepo());
     const res = await bot.handleMessage(PHONE, msg('estado'));
     expect(res).toContain('No tienes pedidos activos');
   });
 
   it('shows single order detail when only one active order', async () => {
     const order = makeOrder('SH-001', 'confirmed');
-    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue([order]) }));
+    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue([order]) }), makeProductRepo());
     const res = await bot.handleMessage(PHONE, msg('estado'));
     expect(res).toContain('SH-001');
     expect(res).toContain('Confirmado');
@@ -725,7 +749,7 @@ describe('WhatsAppBot — order status with pagination', () => {
       makeOrder('SH-002', 'preparing'),
       makeOrder('SH-003', 'pending'),
     ];
-    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue(orders) }));
+    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue(orders) }), makeProductRepo());
     const res = await bot.handleMessage(PHONE, msg('estado'));
     expect(res).toContain('SH-001');
     expect(res).toContain('SH-002');
@@ -735,7 +759,7 @@ describe('WhatsAppBot — order status with pagination', () => {
   it('shows next page button when more than 5 active orders (1 detail + 4 compact + more)', async () => {
     // orders[0]=detail, orders[1..4]=compact — need orders[5+] to trigger Ver más
     const orders = Array.from({ length: 6 }, (_, i) => makeOrder(`SH-00${i + 1}`, 'pending'));
-    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue(orders) }));
+    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue(orders) }), makeProductRepo());
     const res = await bot.handleMessage(PHONE, msg('estado'));
     expect(res).toContain('Ver más');
   });
@@ -743,7 +767,7 @@ describe('WhatsAppBot — order status with pagination', () => {
   it('navigates to next page of orders', async () => {
     // 6 orders: [0] detail, [1..4] compact, [5] on page 2
     const orders = Array.from({ length: 6 }, (_, i) => makeOrder(`SH-00${i + 1}`, 'pending'));
-    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue(orders) }));
+    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue(orders) }), makeProductRepo());
     await bot.handleMessage(PHONE, msg('estado'));
     const res = await bot.handleMessage(PHONE, msg('1')); // Ver más → page 2
     expect(res).toContain('SH-006'); // orders[5]
@@ -751,7 +775,7 @@ describe('WhatsAppBot — order status with pagination', () => {
 
   it('shows back option and no next-page when on last page', async () => {
     const orders = Array.from({ length: 6 }, (_, i) => makeOrder(`SH-00${i + 1}`, 'pending'));
-    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue(orders) }));
+    const bot = new WhatsAppBot(makeRepo({ findAllPendingByCustomer: vi.fn().mockResolvedValue(orders) }), makeProductRepo());
     await bot.handleMessage(PHONE, msg('estado'));
     const res = await bot.handleMessage(PHONE, msg('1')); // Ver más → last page
     expect(res).not.toContain('Ver más');

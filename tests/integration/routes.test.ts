@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import request from 'supertest';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
-import type { orderRepository as OrderRepoType } from '../../src/infrastructure/repositories/OrderRepository.js';
+import type { OrderRepositoryPort } from '../../src/application/ports/OrderRepositoryPort.js';
 
 const TEST_JWT_SECRET = 'test-secret-for-tests';
 process.env.JWT_SECRET = TEST_JWT_SECRET;
@@ -95,7 +95,7 @@ vi.mock('../../src/infrastructure/repositories/CategoryRepository.js', () => {
   return { categoryRepository: mockRepo, CategoryRepository: vi.fn(() => mockRepo) };
 });
 
-let mockRepo: typeof OrderRepoType & {
+let mockRepo: OrderRepositoryPort & {
   findAll: ReturnType<typeof vi.fn>;
   findById: ReturnType<typeof vi.fn>;
   update: ReturnType<typeof vi.fn>;
@@ -103,7 +103,7 @@ let mockRepo: typeof OrderRepoType & {
 
 beforeAll(async () => {
   const mod = await import('../../src/infrastructure/repositories/OrderRepository.js');
-  mockRepo = mod.orderRepository as typeof mockRepo;
+  mockRepo = mod.orderRepository as unknown as typeof mockRepo;
 });
 
 const app = createApp();
