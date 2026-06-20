@@ -91,6 +91,16 @@ services:
 
 **Nota:** If the healthcheck itself fails (e.g., wrong tool or wrong port), Coolify destroys the container completely (`docker ps -a` will not show it). Always check `docker ps` first.
 
+**Fix permanente (en código)**
+Implemented graceful shutdown in `src/index.ts` to mitigate Traefik's routing bug during rolling updates:
+
+1. On `SIGTERM` (sent by Coolify during deploy), the app sets `isShuttingDown = true`
+2. The `/health` endpoint returns `503` with status `shutting_down` for 10 seconds
+3. This gives Traefik time to detect the unhealthy container and remove it from the routing pool
+4. After 10s, the HTTP server closes gracefully
+
+This is a workaround for Coolify issue #8627 — during rolling updates, Traefik continues routing to the dying container for several seconds. By marking ourselves as unhealthy before closing, we minimize the window of 504 errors.
+
 ### I2. Admin dashboard still polling after SSE deploy
 
 **Síntomas**
@@ -121,6 +131,32 @@ Added a small inline script to `admin/index.html` that forces the Service Worker
 ```
 
 This calls `registration.update()` which checks the server for a new `sw.js`. If found, the browser installs the new version and prompts the user to reload (or auto-reloads on next visit).
+
+### I3. OpenWAAdapter notifications fail with 500 error
+
+**Síntomas**
+- Bot replies work fine (messages sent via webhook)
+- Order status change notifications fail: `[OpenWAAdapter] Failed to send message: {"statusCode":500,"message":"Internal server error"}`
+- Admin dashboard shows status change succeeds, but WhatsApp message never arrives
+
+**Causa**
+OpenWA uses WhatsApp LIDs (Long IDs) like `178327646171353@lid` for certain users. The webhook payload includes the original `chatId` (LID), but this was not persisted with the order. When sending notifications, the app constructed a phone-based JID (`573011758999@c.us`) which OpenWA rejects for LID users.
+
+**Fix implementado**
+Persist the original `chatId` from the webhook and use it for all WhatsApp communications:
+
+1. Added `chatId?: string` to `CustomerData` interface and `Customer` class
+2. Added `customer_chat_id VARCHAR(50)` column to `orders` table with migration
+3. Updated `OrderRepository` to save/retrieve `customer_chat_id`
+4. `WebhookService` passes `chatId` from webhook payload to `WhatsAppBot`
+5. `WhatsAppBot` stores `chatId` in session and passes it when creating `Order`
+6. `WhatsAppSender.sendWhatsAppMessage` accepts optional `chatId` parameter
+7. `notifyCustomer` in orders route uses `order.customer.chatId` if available
+
+**Notas**
+- Backward compatible: works with Meta adapter (no `chatId` in payload)
+- Existing orders without `chatId` will continue using phone-based JID (may fail for LID users)
+- New orders created after this fix will have the correct `chatId` stored
 
 ---
 

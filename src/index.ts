@@ -5,6 +5,7 @@ import './config/env.js';
 
 import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
+import { createServer } from 'http';
 import { join } from 'path';
 import { initDatabase, pool } from './infrastructure/database/connection.js';
 
@@ -60,7 +61,12 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 // Health check — includes DB readiness for monitoring
 let dbReady = false;
+let isShuttingDown = false;
 app.get('/health', async (_req: Request, res: Response) => {
+  if (isShuttingDown) {
+    // Return 503 during graceful shutdown so Traefik removes this container from the pool
+    return res.status(503).json({ status: 'shutting_down', ready: false, timestamp: new Date().toISOString() });
+  }
   try {
     const client = await pool.connect();
     await client.query('SELECT NOW()');
@@ -120,8 +126,31 @@ app.use((_req: Request, res: Response) => {
 });
 
 async function startServer() {
+  const server = createServer(app);
+
+  // Graceful shutdown: on SIGTERM, mark as shutting down, wait 10s for Traefik to detect 503, then close
+  process.on('SIGTERM', () => {
+    console.log('🛑 SIGTERM received — initiating graceful shutdown');
+    isShuttingDown = true;
+
+    // Give Traefik 10s to detect the 503 health check and remove this container from the pool
+    setTimeout(() => {
+      console.log('🔌 Closing HTTP server');
+      server.close(() => {
+        console.log('✅ Server closed gracefully');
+        process.exit(0);
+      });
+
+      // Force exit after 15s if server.close() hangs
+      setTimeout(() => {
+        console.error('⚠️ Server did not close gracefully — forcing exit');
+        process.exit(1);
+      }, 5000);
+    }, 10000);
+  });
+
   // Start listening immediately — don't block on DB init
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     const isDev = process.env.NODE_ENV !== 'production';
     const whatsappProvider = process.env.WHATSAPP_PROVIDER || 'meta';
     console.log(`
