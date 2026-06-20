@@ -139,8 +139,19 @@ This calls `registration.update()` which checks the server for a new `sw.js`. If
 - Order status change notifications fail: `[OpenWAAdapter] Failed to send message: {"statusCode":500,"message":"Internal server error"}`
 - Admin dashboard shows status change succeeds, but WhatsApp message never arrives
 
-**Causa**
-OpenWA uses WhatsApp LIDs (Long IDs) like `178327646171353@lid` for certain users. The webhook payload includes the original `chatId` (LID), but this was not persisted with the order. When sending notifications, the app constructed a phone-based JID (`573011758999@c.us`) which OpenWA rejects for LID users.
+**Causa técnica**
+OpenWA usa dos tipos de identificadores para usuarios de WhatsApp:
+
+1. **JID de teléfono** (usuarios normales): `573011758999@c.us`
+2. **LID (Long ID)** (ciertos usuarios): `178327646171353@lid`
+
+El webhook de OpenWA siempre incluye el `chatId` original (LID si aplica). Antes del fix, este `chatId` se usaba para responder al mensaje inmediato, pero **no se persistía** con la orden.
+
+Cuando el admin cambiaba el estado de una orden, la app construía un JID de teléfono desde el número guardado (`+573011758999` → `573011758999@c.us`). Para usuarios LID, OpenWA rechaza este JID con 500 error porque requiere el LID.
+
+**Analogía de bidireccionalidad**
+- **Antes (unidireccional)**: Usuario → bot (webhook con LID) → bot responde usando LID ✅. Pero Admin → bot (notificación) → bot usaba teléfono → fallaba para LID users ❌
+- **Ahora (bidireccional)**: El webhook nos da la "llave" (LID), la guardamos, y la reutilizamos para todas las comunicaciones con ese usuario.
 
 **Fix implementado**
 Persist the original `chatId` from the webhook and use it for all WhatsApp communications:
@@ -157,6 +168,7 @@ Persist the original `chatId` from the webhook and use it for all WhatsApp commu
 - Backward compatible: works with Meta adapter (no `chatId` in payload)
 - Existing orders without `chatId` will continue using phone-based JID (may fail for LID users)
 - New orders created after this fix will have the correct `chatId` stored
+- Orders created via admin dashboard (not via bot) won't have `chatId` — this is expected
 
 ---
 
