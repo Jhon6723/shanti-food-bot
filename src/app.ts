@@ -12,8 +12,9 @@ export function createApp() {
   const app = express();
 
   // Capture raw body for webhook signature verification
+  // Note: verify callback receives http.IncomingMessage, not Express.Request
   app.use(express.json({
-    verify: (req: Request, _res: Response, buf: Buffer) => {
+    verify: (req, _res, buf: Buffer) => {
       (req as Request & { rawBody?: string }).rawBody = buf.toString();
     }
   }));

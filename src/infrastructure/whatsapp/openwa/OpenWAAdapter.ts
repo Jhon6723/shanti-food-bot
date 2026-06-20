@@ -72,15 +72,23 @@ export class OpenWAAdapter implements WhatsAppAdapter {
     }
 
     const signature = req.headers['x-openwa-signature'] as string | undefined;
+    console.log(`[OpenWAAdapter] Received signature: ${signature ?? 'MISSING'}`);
+
     if (!signature) return false;
 
     // Use rawBody (captured by express.json verify callback) to match the exact payload OpenWA signed
-    const rawBody = (req as Request & { rawBody?: string }).rawBody ?? JSON.stringify(req.body);
+    const rawBody = req.rawBody ?? JSON.stringify(req.body);
+    console.log(`[OpenWAAdapter] rawBody present: ${req.rawBody ? 'YES' : 'NO'}`);
+    console.log(`[OpenWAAdapter] rawBody length: ${rawBody.length}`);
+    console.log(`[OpenWAAdapter] rawBody content: ${rawBody.slice(0, 200)}...`);
 
     const expected = 'sha256=' + crypto
       .createHmac('sha256', secret)
       .update(rawBody)
       .digest('hex');
+
+    console.log(`[OpenWAAdapter] Expected signature: ${expected}`);
+    console.log(`[OpenWAAdapter] Signature match: ${signature === expected}`);
 
     try {
       return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));

@@ -34,7 +34,11 @@ app.use(cors({
 }));
 
 // Middleware
-app.use(express.json());
+app.use(express.json({
+  verify: (req, _res, buf: Buffer) => {
+    (req as Request & { rawBody?: string }).rawBody = buf.toString();
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // Request logging

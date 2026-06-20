@@ -1,5 +1,14 @@
 // Shared domain types — mirror of specs/openapi.yaml schemas
 
+// Extend Express Request to carry raw body for webhook signature verification
+declare global {
+  namespace Express {
+    interface Request {
+      rawBody?: string;
+    }
+  }
+}
+
 export type OrderType = 'delivery' | 'pickup';
 export type PaymentMethod = 'cash' | 'nequi';
 export type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
