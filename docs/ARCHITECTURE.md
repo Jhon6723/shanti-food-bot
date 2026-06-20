@@ -149,6 +149,52 @@ interface SessionState {
 }
 ```
 
+## Reglas de Dependencia (Layered Architecture)
+
+Las flechas de import apuntan **hacia abajo**. Nunca al revés.
+
+```
+Presentation (api/)
+    ↓ importa
+Application (bot/)
+    ↓ importa
+Domain (domain/)
+    ← (pura — no importa de arriba)
+Infrastructure (infrastructure/)
+    ← (implementación — no importa de arriba)
+```
+
+### Reglas
+
+| Capa | Puede importar de | No puede importar de |
+|------|-------------------|---------------------|
+| `api/` (routes, controllers, middleware) | `bot/`, `domain/`, `types/` | `infrastructure/` directamente (debe pasar por Application) |
+| `bot/` (WhatsAppBot, lógica conversacional) | `domain/`, `infrastructure/` | `api/` |
+| `domain/` (Order, Product) | `types/` | `bot/`, `api/`, `infrastructure/` |
+| `infrastructure/` (repos, adapters, DB) | `domain/`, `types/` | `api/`, `bot/` |
+
+### Estado de violaciones
+
+1. ✅ **`api/routes/orders.ts`** — Ya no importa `OrderRepository` directamente.
+   - Se creó `src/application/OrderService.ts` que media entre la route y el repositorio.
+   - La route ahora importa `orderService` desde `application/`.
+2. ✅ **`api/routes/webhook.ts`** — Ya no importa `getAdapter()` desde Infrastructure.
+   - Se creó `src/application/WebhookService.ts` que encapsula el adapter y el bot.
+   - La route ahora importa `webhookService` desde `application/`.
+3. ✅ **`bot/WhatsAppBot.ts`** — Ya no importa repositorios directamente desde Infrastructure.
+   - Se crearon `OrderRepositoryPort` y `ProductRepositoryPort` en `src/application/ports/`.
+   - `OrderRepository` e `ProductRepository` implementan sus respectivos ports.
+   - `WhatsAppBot` recibe ambos repositorios **inyectados por constructor**.
+   - El wiring concreto se hace en `src/composition.ts` (composition root).
+
+### Objetivo a largo plazo
+
+Agregar una capa `src/application/` (Services) que medie entre `api/` e `infrastructure/`. Las routes solo hablan con Services. Los Services hablan con Repos + Domain.
+
+```
+api/routes/orders.ts ──→ application/OrderService.ts ──→ infrastructure/OrderRepository.ts
+```
+
 ## Base de Datos (PostgreSQL)
 
 ### Tabla `users` (nueva — v1.4)
