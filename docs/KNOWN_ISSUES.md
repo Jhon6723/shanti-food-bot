@@ -35,7 +35,94 @@
 
 ---
 
-## 💡 Pendiente
+## � Production Infrastructure Issues
+
+### I1. 504 Gateway Timeout after deploy (Coolify + Traefik)
+
+**Síntomas**
+- `curl https://shanti-bot.pixpro.lat/health` returns `504 Gateway Timeout`
+- Direct access via IP: `curl http://178.105.185.165:3000/health` works fine
+- Container shows `Up (healthy)` in `docker ps`
+- Traefik returns `503 "no available server"` or hangs indefinitely
+
+**Causa**
+Coolify uses Traefik as a reverse proxy. When a new container is deployed, Traefik sometimes fails to update its routing table to point to the new container. It continues routing to the old (destroyed) container, causing a `504`.
+
+**Diagnóstico**
+```bash
+# Check if the app container is actually running
+ssh root@178.105.185.165
+docker ps --filter "publish=3000" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+# Test direct access (bypasses Traefik)
+curl http://178.105.185.165:3000/health
+# Expected: {"status":"ok","db":"connected","ready":true,...}
+
+# Test via domain (goes through Traefik)
+curl -v https://shanti-bot.pixpro.lat/health
+# Failing: hangs or returns 504
+```
+
+**Fix inmediato**
+```bash
+ssh root@178.105.185.165
+docker restart coolify-proxy
+sleep 5
+curl -s https://shanti-bot.pixpro.lat/health
+```
+
+**Fix permanente**
+- Added `healthcheck` to the `app` service in `docker-compose.yml` with a 60s `start_period`
+- Added `wget --spider` health check (node:22-alpine does not include `curl`)
+- Coolify reads Docker health checks and only routes to "healthy" containers
+
+```yaml
+services:
+  app:
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+```
+
+**Nota:** If the healthcheck fails (e.g., wrong tool or wrong port), Coolify destroys the container completely (`docker ps -a` will not show it). Always check `docker ps` first.
+
+### I2. Admin dashboard still polling after SSE deploy
+
+**Síntomas**
+- `GET /api/v1/orders` requests every ~5 seconds appear in server logs
+- The `useOrdersWithSound()` hook includes SSE via `EventSource`
+- Production still behaves like the old polling version
+
+**Causa**
+The admin dashboard is a PWA with a Service Worker (`sw.js`) that aggressively caches JS assets. After a deploy, the browser continues running the old cached code because the Service Worker never updated itself.
+
+**Fix inmediato (por usuario)**
+1. Open `https://shanti-bot.pixpro.lat/admin`
+2. **F12 → DevTools → Application → Service Workers**
+3. Click **"Unregister"** on the active Service Worker
+4. **Ctrl+Shift+R** (hard reload) — forces fresh assets
+
+**Fix permanente (en código)**
+Added a small inline script to `admin/index.html` that forces the Service Worker to check for updates on every page load:
+
+```html
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.ready.then(function(registration) {
+      registration.update();
+    });
+  }
+</script>
+```
+
+This calls `registration.update()` which checks the server for a new `sw.js`. If found, the browser installs the new version and prompts the user to reload (or auto-reloads on next visit).
+
+---
+
+## �� Pendiente
 
 ### P1. Sin manejo de ubicación GPS
 **Problema**: `handleAddress` solo acepta texto. No procesa `message.location` de WhatsApp.
