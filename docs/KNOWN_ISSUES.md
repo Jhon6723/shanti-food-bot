@@ -71,10 +71,10 @@ sleep 5
 curl -s https://shanti-bot.pixpro.lat/health
 ```
 
-**Fix permanente**
-- Added `healthcheck` to the `app` service in `docker-compose.yml` with a 60s `start_period`
-- Added `wget --spider` health check (node:22-alpine does not include `curl`)
-- Coolify reads Docker health checks and only routes to "healthy" containers
+**Mitigación (ya aplicada)**
+- Added `healthcheck` to the `app` service in `docker-compose.yml`
+- Uses `wget --spider` (node:22-alpine does not include `curl`)
+- Prevents Coolify from destroying the container when it takes time to start
 
 ```yaml
 services:
@@ -87,7 +87,9 @@ services:
       start_period: 60s
 ```
 
-**Nota:** If the healthcheck fails (e.g., wrong tool or wrong port), Coolify destroys the container completely (`docker ps -a` will not show it). Always check `docker ps` first.
+**⚠️ Nota:** The healthcheck prevents Coolify from killing the container, but it does **NOT** fix the Traefik routing bug. The `504` can still happen after every deploy because Traefik sometimes fails to detect the new container. This is a Coolify/Traefik issue, not application code.
+
+**Nota:** If the healthcheck itself fails (e.g., wrong tool or wrong port), Coolify destroys the container completely (`docker ps -a` will not show it). Always check `docker ps` first.
 
 ### I2. Admin dashboard still polling after SSE deploy
 
