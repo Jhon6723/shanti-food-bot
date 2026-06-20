@@ -11,7 +11,12 @@ import webhookRouter from './api/routes/webhook.js';
 export function createApp() {
   const app = express();
 
-  app.use(express.json());
+  // Capture raw body for webhook signature verification
+  app.use(express.json({
+    verify: (req: Request, _res: Response, buf: Buffer) => {
+      (req as Request & { rawBody?: string }).rawBody = buf.toString();
+    }
+  }));
   app.use(express.urlencoded({ extended: true }));
 
   app.get('/health', (_req: Request, res: Response) => {
