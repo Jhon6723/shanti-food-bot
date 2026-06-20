@@ -2,9 +2,9 @@
 
 import { Router, type Request, type Response } from 'express';
 import PDFDocument from 'pdfkit';
+import { orderService } from '../../application/OrderService.js';
 import { Order } from '../../domain/models/Order.js';
 import { getProductById } from '../../domain/models/Product.js';
-import { orderRepository } from '../../infrastructure/repositories/OrderRepository.js';
 import { sendWhatsAppMessage } from '../../infrastructure/whatsapp/WhatsAppSender.js';
 import type { OrderRequestData, OrderStatus } from '../../types/index.js';
 import { requireJWT, requireRole } from '../middleware/auth.js';
@@ -96,7 +96,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     const shouldAutoConfirm = order.total < 50000 && items.length <= 3;
     if (shouldAutoConfirm) order.confirm();
-    await orderRepository.save(order);
+    await orderService.createOrder(order);
 
     res.status(201).json(order.toJSON());
   } catch (error) {
@@ -117,7 +117,7 @@ router.get('/', requireJWT, async (req: Request, res: Response) => {
       if (req.query.type) filters.type = req.query.type as 'delivery' | 'pickup';
     }
 
-    const orders = await orderRepository.findAll(filters);
+    const orders = await orderService.getOrders(filters);
     res.json(orders.map((o) => o.toJSON()));
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
@@ -127,7 +127,7 @@ router.get('/', requireJWT, async (req: Request, res: Response) => {
 // GET /orders/stats/dashboard — Admin statistics (must be before /:id)
 router.get('/stats/dashboard', requireJWT, requireRole('admin'), async (_req: Request, res: Response) => {
   try {
-    res.json(await orderRepository.getStats());
+    res.json(await orderService.getDashboardStats());
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
@@ -136,7 +136,7 @@ router.get('/stats/dashboard', requireJWT, requireRole('admin'), async (_req: Re
 // GET /orders/:id — Get single order (admin: any; delivery: only if status=ready)
 router.get('/:id', requireJWT, async (req: Request, res: Response) => {
   try {
-    const order = await orderRepository.findById(req.params.id);
+    const order = await orderService.getOrderById(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
     res.json(order.toJSON());
   } catch (error) {
@@ -147,7 +147,7 @@ router.get('/:id', requireJWT, async (req: Request, res: Response) => {
 // PATCH /orders/:id — Update order status (admin: any transition; delivery: only delivered)
 router.patch('/:id', requireJWT, async (req: Request, res: Response) => {
   try {
-    const order = await orderRepository.findById(req.params.id);
+    const order = await orderService.getOrderById(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
     const { status, notes } = req.body as { status?: OrderStatus; notes?: string };
@@ -191,7 +191,7 @@ router.patch('/:id', requireJWT, async (req: Request, res: Response) => {
     }
     if (notes) order.notes = notes;
 
-    await orderRepository.update(order);
+    await orderService.updateOrder(order);
 
     if (status) {
       await notifyCustomer(order, status);
@@ -212,7 +212,7 @@ router.get('/reports/sales', requireJWT, requireRole('admin'), async (req: Reque
       return res.status(400).json({ error: 'from and to dates are required' });
     }
 
-    const report = await orderRepository.getSalesReport({
+    const report = await orderService.getSalesReport({
       from: String(from),
       to: String(to),
       status: status ? String(status) : undefined,
@@ -240,7 +240,7 @@ router.post('/reports/export', requireJWT, requireRole('admin'), async (req: Req
       return res.status(400).json({ error: 'format and filters (from, to) are required' });
     }
 
-    const report = await orderRepository.getSalesReport({
+    const report = await orderService.getSalesReport({
       ...filters,
       page: 1,
       limit: 99999,

@@ -1,38 +1,15 @@
 // API Routes: WhatsApp Webhook — implements specs/openapi.yaml
 
 import { Router, type Request, type Response } from 'express';
-import { bot } from '../../bot/WhatsAppBot.js';
-import { getAdapter } from '../../infrastructure/whatsapp/index.js';
+import { bot, webhookService } from '../../composition.js';
 
 const router = Router();
 
 // POST /webhooks/whatsapp — Receive WhatsApp messages (provider-agnostic)
 router.post('/whatsapp', async (req: Request, res: Response) => {
-  const adapter = getAdapter();
-
   // Always 200 — providers retry on non-200, causing duplicate messages at unexpected hours
   res.sendStatus(200);
-
-  if (adapter.verifyRequest && !adapter.verifyRequest(req)) {
-    console.warn(`[webhook] Invalid ${adapter.name} signature — request ignored`);
-    return;
-  }
-
-  const payloads = adapter.parseIncoming(req);
-  for (const payload of payloads) {
-    try {
-      const response = await bot.handleMessage(payload.from, {
-        type: payload.type as 'text',
-        text: payload.text,
-        interactive: payload.interactive,
-      });
-
-      await adapter.sendMessage(payload.from, response, payload.chatId ? { chatId: payload.chatId } : undefined);
-      console.log(`[webhook] OK provider=${adapter.name} msgId=${payload.messageId} from=${payload.from}`);
-    } catch (error) {
-      console.error(`[webhook] ERROR msgId=${payload.messageId} from=${payload.from}`, error);
-    }
-  }
+  await webhookService.process(req);
 });
 
 // GET /webhooks/whatsapp — Verification endpoint (for WhatsApp API setup)
