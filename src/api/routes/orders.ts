@@ -3,6 +3,7 @@
 import { Router, type Request, type Response } from 'express';
 import PDFDocument from 'pdfkit';
 import { orderService } from '../../application/OrderService.js';
+import { sseService } from '../../application/SSEService.js';
 import { Order } from '../../domain/models/Order.js';
 import { getProductById } from '../../domain/models/Product.js';
 import { sendWhatsAppMessage } from '../../infrastructure/whatsapp/WhatsAppSender.js';
@@ -98,6 +99,8 @@ router.post('/', async (req: Request, res: Response) => {
     if (shouldAutoConfirm) order.confirm();
     await orderService.createOrder(order);
 
+    sseService.broadcast({ type: 'orderCreated', data: order.toJSON() });
+
     res.status(201).json(order.toJSON());
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
@@ -192,6 +195,8 @@ router.patch('/:id', requireJWT, async (req: Request, res: Response) => {
     if (notes) order.notes = notes;
 
     await orderService.updateOrder(order);
+
+    sseService.broadcast({ type: 'orderUpdated', data: order.toJSON() });
 
     if (status) {
       await notifyCustomer(order, status);

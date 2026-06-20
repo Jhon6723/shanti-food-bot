@@ -3,6 +3,7 @@
 
 import type { OrderRepositoryPort } from '../application/ports/OrderRepositoryPort.js';
 import type { ProductRepositoryPort, ProductRow } from '../application/ports/ProductRepositoryPort.js';
+import { sseService } from '../application/SSEService.js';
 import { Order } from '../domain/models/Order.js';
 import type { OrderItemData, OrderType, PaymentMethod } from '../types/index.js';
 
@@ -593,6 +594,7 @@ Responde con el número de la opción.`;
       const shouldAutoConfirm = order.total < 50000 && session.items.length <= 3;
       if (shouldAutoConfirm) order.confirm();
       await this.orderRepo.save(order);
+      sseService.broadcast({ type: 'orderCreated', data: order.toJSON() });
       session.reset();
 
       let msg = `✅ *¡PEDIDO CONFIRMADO!* ✅\n\nNúmero de orden: *#${order.id}*\n\n`;
