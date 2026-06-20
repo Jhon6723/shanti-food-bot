@@ -1,9 +1,9 @@
 // WhatsApp Bot — implements whatsapp-flows.md
 // Handles conversational flows for order management
 
+import type { OrderRepositoryPort } from '../application/ports/OrderRepositoryPort.js';
+import type { ProductRepositoryPort, ProductRow } from '../application/ports/ProductRepositoryPort.js';
 import { Order } from '../domain/models/Order.js';
-import { orderRepository } from '../infrastructure/repositories/OrderRepository.js';
-import { productRepository, type ProductRow } from '../infrastructure/repositories/ProductRepository.js';
 import type { OrderItemData, OrderType, PaymentMethod } from '../types/index.js';
 
 type BotStep =
@@ -76,16 +76,15 @@ class Session {
   }
 }
 
-const sessions = new Map<string, Session>();
-
 export class WhatsAppBot {
   private readonly deliveryFee = 3000;
   private readonly restaurantAddress = process.env.BUSINESS_ADDRESS ?? 'Consultar dirección con el restaurante';
-  private readonly repo: typeof orderRepository;
+  private readonly sessions = new Map<string, Session>();
 
-  constructor(repo?: typeof orderRepository) {
-    this.repo = repo ?? orderRepository;
-  }
+  constructor(
+    private readonly orderRepo: OrderRepositoryPort,
+    private readonly productRepo: ProductRepositoryPort
+  ) {}
 
   async handleMessage(
     rawFrom: string,
@@ -98,7 +97,7 @@ export class WhatsAppBot {
 
     if (text === 'hola' || text === 'inicio' || text === 'empezar') {
       session.reset();
-      const savedName = await this.repo.getCustomerNameByPhone(from);
+      const savedName = await this.orderRepo.getCustomerNameByPhone(from);
       // 'Cliente' is a fallback placeholder, not a real saved name
       if (savedName && savedName.trim().toLowerCase() !== 'cliente') {
         session.customerName = savedName;
@@ -157,10 +156,10 @@ export class WhatsAppBot {
   }
 
   private getOrCreateSession(phone: string): Session {
-    if (!sessions.has(phone)) {
-      sessions.set(phone, new Session(phone));
+    if (!this.sessions.has(phone)) {
+      this.sessions.set(phone, new Session(phone));
     }
-    return sessions.get(phone)!;
+    return this.sessions.get(phone)!;
   }
 
   private welcomeMessage(): string {
@@ -214,9 +213,9 @@ Responde con el número de la opción.`;
   }
 
   private async showFullMenu(): Promise<string> {
-    const arroces = await productRepository.findByCategory('arroz_chino', true);
-    const bandejas = await productRepository.findByCategory('bandeja_paisa', true);
-    const bebidas = await productRepository.findByCategory('bebidas', true);
+    const arroces = await this.productRepo.findByCategory('arroz_chino', true);
+    const bandejas = await this.productRepo.findByCategory('bandeja_paisa', true);
+    const bebidas = await this.productRepo.findByCategory('bebidas', true);
 
     let menu = `*🍚 MENÚ ARROCERÍA SHANTI 🍚*\n\n`;
     menu += `*Arroces Chinos:*\n`;
@@ -230,7 +229,7 @@ Responde con el número de la opción.`;
   }
 
   private async showProductList(): Promise<string> {
-    const all = await productRepository.findAll(false);
+    const all = await this.productRepo.findAll(false);
     let list = `*📋 MENÚ — Selecciona un número:*\n\n`;
     all.forEach((p: ProductRow, i: number) => {
       list += `${i + 1}. ${p.name} — $${p.price.toLocaleString()}\n`;
@@ -252,14 +251,14 @@ Responde con el número de la opción.`;
       return `📝 ¿Cual es tu nombre?\n\n(Escribe tu nombre o "hola" para reiniciar)`;
     }
 
-    const all = await productRepository.findAll(false);
+    const all = await this.productRepo.findAll(false);
     const idx = parseInt(text) - 1;
     let product: ProductRow | undefined;
 
     if (!isNaN(idx) && idx >= 0 && idx < all.length) {
       product = all[idx];
     } else {
-      const found = await productRepository.findAll(false);
+      const found = await this.productRepo.findAll(false);
       product = found.find((p: ProductRow) => p.name.toLowerCase().includes(text) || p.id === text);
     }
 
@@ -349,7 +348,7 @@ Responde con el número de la opción.`;
       if (session.items.length > 0) {
         msg += `🛒 *Carrito actual:*\n`;
         for (const item of session.items) {
-          const p = await productRepository.findById(item.productId);
+          const p = await this.productRepo.findById(item.productId);
           msg += `• ${item.quantity}x ${p?.name ?? item.productId} — $${((item.unitPrice ?? 0) * item.quantity).toLocaleString()}\n`;
         }
         msg += `\n`;
@@ -386,7 +385,7 @@ Responde con el número de la opción.`;
       }
       const removed = session.items.pop()!;
       session.subtotal -= removed.unitPrice! * removed.quantity;
-      session.currentProduct = await productRepository.findById(removed.productId) ?? null;
+      session.currentProduct = await this.productRepo.findById(removed.productId) ?? null;
       session.pendingItem = { ...removed, quantity: 0 };
       session.step = 'quantity';
       return `Producto eliminado del carrito.\n\n¿Cuántas porciones de *${session.currentProduct?.name ?? 'este producto'}* deseas?\n\n_(Escribe *0* o *volver* para regresar)_`;
@@ -419,7 +418,7 @@ Responde con el número de la opción.`;
     if (text === '1' || text.includes('domicilio')) {
       session.type = 'delivery';
       session.total = session.subtotal + this.deliveryFee;
-      const lastAddress = await this.repo.findLastDeliveryAddress(from);  // eslint-disable-line
+      const lastAddress = await this.orderRepo.findLastDeliveryAddress(from);  // eslint-disable-line
       if (lastAddress) {
         session.lastAddress = lastAddress;
         session.step = 'address_confirm';
@@ -524,7 +523,7 @@ Responde con el número de la opción.`;
   private async showOrderSummary(session: Session): Promise<string> {
     let summary = `*📋 RESUMEN DE TU PEDIDO 📋*\n\n`;
     for (const [i, item] of session.items.entries()) {
-      const product = await productRepository.findById(item.productId);
+      const product = await this.productRepo.findById(item.productId);
       if (!product) continue;
       const itemTotal = item.unitPrice! * item.quantity;
       summary += `${i + 1}. ${product.name}\n   ${item.quantity}x $${item.unitPrice!.toLocaleString()} = $${itemTotal.toLocaleString()}\n`;
@@ -593,7 +592,7 @@ Responde con el número de la opción.`;
       const order = new Order(orderData);
       const shouldAutoConfirm = order.total < 50000 && session.items.length <= 3;
       if (shouldAutoConfirm) order.confirm();
-      await this.repo.save(order);
+      await this.orderRepo.save(order);
       session.reset();
 
       let msg = `✅ *¡PEDIDO CONFIRMADO!* ✅\n\nNúmero de orden: *#${order.id}*\n\n`;
@@ -628,7 +627,7 @@ Responde con el número de la opción.`;
     }
     msg += `\n*Productos:*\n`;
     for (const item of order.items) {
-      const product = await productRepository.findById(item.productId);
+      const product = await this.productRepo.findById(item.productId);
       const name = product?.name ?? item.productId;
       msg += `• ${item.quantity}x ${name} — $${(item.unitPrice * item.quantity).toLocaleString()}\n`;
       if (item.customizations.length > 0) msg += `  _(${item.customizations.join(', ')})_\n`;
@@ -658,7 +657,7 @@ Responde con el número de la opción.`;
   }
 
   private async checkOrderStatus(phone: string, session: Session): Promise<string> {
-    const orders = await this.repo.findAllPendingByCustomer(phone);
+    const orders = await this.orderRepo.findAllPendingByCustomer(phone);
     if (orders.length === 0) {
       return `No tienes pedidos activos en este momento.\n\nEscribe "hola" para hacer un nuevo pedido. 🍚`;
     }
@@ -717,5 +716,3 @@ Responde con el número de la opción.`;
     return `Opción no reconocida.\n\n1️⃣ Ver más\n0️⃣ Volver al menú`;
   }
 }
-
-export const bot = new WhatsAppBot();
