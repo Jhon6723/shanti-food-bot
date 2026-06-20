@@ -43,6 +43,26 @@ paths:
         '401':
           description: Credenciales inválidas
 
+  /events:
+    get:
+      summary: Server-Sent Events — actualizaciones de pedidos en tiempo real
+      tags: [Events]
+      responses:
+        '200':
+          description: Stream SSE con eventos de pedidos
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: |
+                  data: {"type":"connected"}
+
+                  event: orderCreated
+                  data: {"id":"SH-001","status":"pending","total":25000}
+
+                  event: orderUpdated
+                  data: {"id":"SH-001","status":"confirmed","total":25000}
+
   /users:
     get:
       summary: Listar usuarios (admin— filtra por rol)

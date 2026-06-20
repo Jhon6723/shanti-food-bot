@@ -178,12 +178,14 @@ POST /api/v1/auth/login
 ```
 
 **Comportamiento:**
-- Polling automático cada **15 segundos** via React Query (`refetchInterval`)
+- Actualizaciones en tiempo real vía **SSE** (`EventSource` a `GET /api/v1/events`)
+- Eventos `orderCreated`, `orderUpdated`, `orderDeleted` invalidan la caché de React Query automáticamente
 - Filtros de estado: Todos / ⏳ Pendiente / ✅ Confirmado / 🍳 Preparando / 🎉 Listo
 - Ordenados por `created_at` descendente (más reciente arriba)
 - Botón de acción principal cambia según el estado actual del pedido (ver sección 5)
 - Pull-to-refresh en móvil
 - Badge con conteo de pedidos pendientes en el título
+- Notificación sonora + vibración al recibir pedido nuevo (`orderCreated`)
 
 ---
 
@@ -463,7 +465,7 @@ Toast: "✅ Entrega confirmada #SH-042"
 - En v1.0 se puede omitir el upload y solo hacer el PATCH como primer paso
 - La URL de la foto queda guardada en `orders.delivery_proof_url` (campo nuevo en DB)
 
-**Polling:** cada 30 segundos para refrescar pedidos listos asignados a reparto.
+**SSE:** conexión `EventSource` a `/api/v1/events` para recibir actualizaciones en tiempo real de pedidos listos asignados a reparto.
 
 ---
 
@@ -716,21 +718,40 @@ Cada vez que el admin cambia el estado de un pedido, el cliente recibe una notif
 
 **Implementación:** El endpoint `PATCH /api/v1/orders/:id` llama a `notifyCustomer()` después de guardar el cambio en DB. Usa `sendWhatsAppMessage` (WhatsApp Cloud API). Si falla el envío, el cambio de estado no se afecta (fire-and-forget).
 
-### Polling con React Query + sonido (v1.4)
+### Actualización en tiempo real con SSE (v1.5)
 
-**No se usa WebSocket en v1.4.** Polling a 5s con detección de pedidos nuevos y notificación sonora.
+**Reemplaza polling por SSE.** El frontend abre una conexión `EventSource` a `GET /api/v1/events` y recibe eventos push del servidor. Cada evento (`orderCreated`, `orderUpdated`, `orderDeleted`) invalida la caché de React Query, que se re-hidrata automáticamente con el endpoint REST correspondiente.
 
-| Pantalla | Intervalo | Endpoint |
-|----------|-----------|----------|
-| Lista de pedidos (admin) | **5 segundos** | `GET /api/v1/orders` |
-| Lista de entregas (repartidor) | **5 segundos** | `GET /api/v1/orders?status=ready&type=delivery` |
-| Estadísticas | 60 segundos | `GET /api/v1/orders/stats/dashboard` |
+| Evento | Origen | Acción en frontend |
+|----------|--------|-------------------|
+| `orderCreated` | `POST /api/v1/orders` o bot WhatsApp | Invalida caché de pedidos, suena notificación si hay pedido pendiente nuevo |
+| `orderUpdated` | `PATCH /api/v1/orders/:id` | Invalida caché de pedidos |
+| `orderDeleted` | `DELETE /api/v1/orders/:id` | Invalida caché de pedidos |
 
-React Query maneja automáticamente: deduplicación, caché, refetch en foco de ventana y reconexión.
+```typescript
+// hooks/useOrders.ts — conexión SSE
+useEffect(() => {
+  const es = new EventSource('/api/v1/events');
+
+  es.addEventListener('orderCreated', () => {
+    qc.invalidateQueries({ queryKey: ['orders'] });
+  });
+  es.addEventListener('orderUpdated', () => {
+    qc.invalidateQueries({ queryKey: ['orders'] });
+  });
+  es.addEventListener('orderDeleted', () => {
+    qc.invalidateQueries({ queryKey: ['orders'] });
+  });
+
+  return () => es.close();
+}, [qc]);
+```
+
+React Query mantiene: deduplicación, caché, refetch en foco de ventana y reconexión.
 
 ### Notificación de pedido nuevo (sonido + vibrar)
 
-La detección compara el resultado anterior con el nuevo en cada polling:
+La detección compara el resultado anterior con el nuevo cuando React Query re-hidrata tras un evento SSE:
 
 ```typescript
 // hooks/useOrders.ts

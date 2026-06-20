@@ -121,40 +121,71 @@ id: 42\nevent: status_change\ndata: {"orderId":"SH-001","status":"ready"}\n\n
 - **No soportado nativamente en IE/Edge legacy** (aunque polyfills existen).
 - **Requiere conexión persistente**: si usas serverless (Lambda, Vercel), no funciona (necesitas servidor con conexiones abiertas).
 
-### Implementación en Express (mínima)
+### Implementación en Express (real)
+
+```typescript
+// src/application/SSEService.ts
+export interface SSEEvent {
+  type: 'orderCreated' | 'orderUpdated' | 'orderDeleted';
+  data: unknown;
+}
+
+export type SSESubscriber = (event: SSEEvent) => void;
+
+export class SSEService {
+  private readonly subscribers = new Set<SSESubscriber>();
+
+  subscribe(cb: SSESubscriber): () => void {
+    this.subscribers.add(cb);
+    return () => { this.subscribers.delete(cb); };
+  }
+
+  broadcast(event: SSEEvent): void {
+    for (const cb of this.subscribers) {
+      try { cb(event); } catch { /* ignore */ }
+    }
+  }
+
+  get subscriberCount(): number {
+    return this.subscribers.size;
+  }
+}
+
+export const sseService = new SSEService();
+```
 
 ```typescript
 // src/api/routes/events.ts
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
+import { sseService } from '../../application/SSEService.js';
 
 const router = Router();
-const clients = new Set<Response>(); // conexiones SSE activas
 
-router.get('/events', (req, res) => {
+router.get('/', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
 
-  clients.add(res);
-  req.on('close', () => clients.delete(res));
+  res.write('data: {"type":"connected"}\n\n');
+
+  const unsubscribe = sseService.subscribe((event) => {
+    res.write(`event: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`);
+  });
+
+  req.on('close', () => { unsubscribe(); res.end(); });
 });
-
-// Función para emitir a todos los clientes conectados
-export function broadcastEvent(data: unknown) {
-  const payload = `data: ${JSON.stringify(data)}\n\n`;
-  clients.forEach(res => res.write(payload));
-}
 
 export default router;
 ```
 
 ### ¿Cuándo usarlo en Shanti?
 
-**Recomendado como primera opción** para:
-- Notificar al dashboard de nuevos pedidos entrantes.
-- Actualizar estado de pedidos en tiempo real (pending → confirmed → preparing → ready).
-- Alertas del sistema (pedido cancelado, stock bajo).
+**✅ Implementado** — El dashboard de administración usa SSE para recibir actualizaciones en tiempo real:
+- `orderCreated` — nuevo pedido entrante (notificación sonora).
+- `orderUpdated` — pedido cambió de estado (pending → confirmed → preparing → ready).
+- `orderDeleted` — pedido eliminado.
+
+Las actualizaciones se emiten desde `src/api/routes/orders.ts` (HTTP API) y `src/bot/WhatsAppBot.ts` (pedidos vía WhatsApp), compartiendo el mismo `sseService` singleton.
 
 ---
 
@@ -254,10 +285,10 @@ Implementar SSE para el dashboard de administración:
 GET /api/v1/events  →  EventSource con notificaciones de pedidos
 ```
 
-Eventos a emitir:
-- `new_order` — nuevo pedido entrante (suena notificación).
-- `status_update` — pedido cambió de estado (pending → confirmed → preparing → ready → delivered).
-- `cancelled` — pedido cancelado (alerta roja).
+Eventos implementados:
+- `orderCreated` — nuevo pedido entrante (suena notificación).
+- `orderUpdated` — pedido cambió de estado (pending → confirmed → preparing → ready → delivered).
+- `orderDeleted` — pedido eliminado.
 
 **Por qué SSE y no WebSockets:**
 - El dashboard solo *recibe* actualizaciones, no necesita enviar nada por la conexión persistente.

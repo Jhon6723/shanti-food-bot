@@ -24,9 +24,10 @@ Sistema de pedidos por WhatsApp para Arroceria Shanti. **Monorepo** con backend 
 │  Express API (src/api/routes/)          │
 │  • webhook.ts  — recibe mensajes         │
 │  • orders.ts   — CRUD pedidos (JWT)      │
+│  • events.ts   — SSE (tiempo real)       │
 │  • products.ts — listar menu             │
 │  • auth.ts     — login + JWT (nuevo)     │
-│  • drivers.ts  — CRUD usuarios (nuevo)   │
+│  • users.ts    — CRUD usuarios (nuevo)   │
 │  • /admin      — sirve PWA estática      │
 └──────────┬──────────────────────────────┘
            │
