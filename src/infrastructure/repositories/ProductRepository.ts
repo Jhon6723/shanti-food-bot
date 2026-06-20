@@ -1,33 +1,14 @@
 // Repository: PostgreSQL Product storage
-// Replaces hardcoded ProductCatalog from domain/models/Product.ts
+// Implements the ProductRepositoryPort from Application.
 
+import type {
+  ProductInput,
+  ProductRepositoryPort,
+  ProductRow,
+} from '../../application/ports/ProductRepositoryPort.js';
 import { query, queryOne } from '../database/connection.js';
 
-export interface ProductRow {
-  id: string;
-  name: string;
-  category_id: string;
-  price: number;
-  description: string | null;
-  available: boolean;
-  preparation_minutes: number;
-  customization_options: string[] | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ProductInput {
-  id: string;
-  name: string;
-  categoryId: string;
-  price: number;
-  description?: string;
-  available?: boolean;
-  preparationMinutes?: number;
-  customizationOptions?: string[];
-}
-
-export class ProductRepository {
+export class ProductRepository implements ProductRepositoryPort {
   private rowToProduct(row: ProductRow) {
     return {
       id: row.id,

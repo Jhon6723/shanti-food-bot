@@ -1,56 +1,17 @@
 // Repository: PostgreSQL Order storage
+// Implements the OrderRepositoryPort from Application.
 
+import type {
+  OrderFilters,
+  OrderRepositoryPort,
+  SalesReportFilters,
+  SalesReportOrder,
+  SalesReportResult,
+  SalesSummary,
+} from '../../application/ports/OrderRepositoryPort.js';
 import { Order } from '../../domain/models/Order.js';
 import type { OrderStatus, OrderType } from '../../types/index.js';
 import { query, queryOne } from '../database/connection.js';
-
-export interface OrderFilters {
-  status?: OrderStatus;
-  type?: OrderType;
-  customerPhone?: string;
-}
-
-export interface SalesReportFilters {
-  from: string;
-  to: string;
-  status?: string;
-  paymentMethod?: string;
-  type?: string;
-  page?: number;
-  limit?: number;
-}
-
-export interface SalesReportOrder {
-  id: string;
-  date: string;
-  customer: string;
-  total: number;
-  paymentMethod: string;
-  type: string;
-  status: string;
-}
-
-export interface SalesSummary {
-  totalOrders: number;
-  totalRevenue: number;
-  totalDeliveryFees: number;
-  averageOrderValue: number;
-  cancelledOrders: number;
-  byPaymentMethod: Array<{ method: string; count: number; revenue: number }>;
-  byOrderType: Array<{ type: string; count: number; revenue: number }>;
-  byDay: Array<{ date: string; count: number; revenue: number }>;
-}
-
-export interface SalesReportResult {
-  summary: SalesSummary;
-  orders: SalesReportOrder[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
-}
 
 interface OrderRow {
   id: string;
@@ -77,7 +38,7 @@ interface OrderItemRow {
   unit_price: number;
 }
 
-export class OrderRepository {
+export class OrderRepository implements OrderRepositoryPort {
   async save(order: Order): Promise<Order> {
     // Insert order
     await query(
