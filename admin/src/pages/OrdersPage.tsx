@@ -107,7 +107,7 @@ export function OrdersPage({ onToast, onLogout }: Props) {
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <span className="text-5xl mb-4 select-none">📋</span>
             <p className="text-slate-400 text-sm">Sin pedidos por ahora</p>
-            <p className="text-slate-400 text-xs mt-1">Se actualiza cada 5 segundos.</p>
+            <p className="text-slate-400 text-xs mt-1">Actualizaciones en tiempo real.</p>
           </div>
         ) : (
           filteredOrders.map((order) => (

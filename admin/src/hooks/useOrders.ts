@@ -17,14 +17,16 @@ export function useOrders(status?: string, type?: string) {
   return useQuery<Order[]>({
     queryKey: ['orders', status, type],
     queryFn: () => api.get<Order[]>(`/orders${query}`),
-    refetchInterval: 5000,
+    // Real-time updates handled by SSE — no polling needed
   });
 }
 
 export function useOrdersWithSound() {
   const result = useOrders();
   const prevPendingRef = useRef(0);
+  const qc = useQueryClient();
 
+  // Sound notification on new pending orders
   useEffect(() => {
     const orders = result.data ?? [];
     const pendingCount = orders.filter((o) => o.status === 'pending').length;
@@ -39,6 +41,29 @@ export function useOrdersWithSound() {
 
     prevPendingRef.current = pendingCount;
   }, [result.data]);
+
+  // SSE connection for real-time order updates
+  useEffect(() => {
+    const es = new EventSource('/api/v1/events');
+
+    es.addEventListener('orderCreated', () => {
+      qc.invalidateQueries({ queryKey: ['orders'] });
+    });
+
+    es.addEventListener('orderUpdated', () => {
+      qc.invalidateQueries({ queryKey: ['orders'] });
+    });
+
+    es.addEventListener('orderDeleted', () => {
+      qc.invalidateQueries({ queryKey: ['orders'] });
+    });
+
+    es.onerror = () => {
+      es.close();
+    };
+
+    return () => es.close();
+  }, [qc]);
 
   return result;
 }
