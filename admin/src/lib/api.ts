@@ -9,13 +9,22 @@ async function request<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const token = getToken();
+  const url = `${BASE_URL}${path}`;
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers ?? {}),
   };
 
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  const start = performance.now();
+  let res: Response;
+  try {
+    res = await fetch(url, { ...options, headers });
+  } catch (networkErr) {
+    console.error(`[API] Network error: ${options.method ?? 'GET'} ${url}`, networkErr);
+    throw new Error('No se pudo conectar al servidor. Verifica tu conexión o que el backend esté activo.');
+  }
+  const duration = Math.round(performance.now() - start);
 
   if (res.status === 401) {
     localStorage.removeItem('token');
@@ -25,8 +34,25 @@ async function request<T>(
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `HTTP ${res.status}`);
+    const contentType = res.headers.get('content-type') ?? '';
+    let bodyText = '';
+    try { bodyText = await res.text(); } catch { /* ignore */ }
+
+    console.error(
+      `[API] Error ${res.status} ${options.method ?? 'GET'} ${url} (${duration}ms)\n` +
+      `  Content-Type: ${contentType}\n` +
+      `  Body: ${bodyText.slice(0, 500)}`
+    );
+
+    let message = `HTTP ${res.status}`;
+    if (res.status === 504) message = 'El servidor no respondió a tiempo (Gateway Timeout). Revisa que el backend esté corriendo.';
+    else if (res.status === 502) message = 'Error de gateway — el backend podría estar reiniciando.';
+    else if (res.status === 503) message = 'Servicio no disponible — el backend podría estar saturado.';
+    else if (contentType.includes('application/json')) {
+      try { message = JSON.parse(bodyText).error ?? message; } catch { /* ignore */ }
+    }
+
+    throw new Error(message);
   }
 
   const text = await res.text();

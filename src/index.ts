@@ -42,19 +42,33 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true }));
 
-// Request logging
-app.use((req: Request, _res: Response, next: NextFunction) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+// Request / Response logging
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const start = Date.now();
+  const reqId = `${req.method} ${req.path}`;
+  console.log(`${new Date().toISOString()} - → ${reqId}`);
+
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const status = res.statusCode;
+    const level = status >= 500 ? 'ERROR' : status >= 400 ? 'WARN' : 'OK';
+    console.log(`${new Date().toISOString()} - ← ${reqId} ${status} (${duration}ms) [${level}]`);
+  });
+
   next();
 });
 
-// Health check
-app.get('/health', (_req: Request, res: Response) => {
-  res.json({
-    status: 'ok',
-    service: 'shanti-food-api',
-    timestamp: new Date().toISOString(),
-  });
+// Health check — includes DB readiness for monitoring
+let dbReady = false;
+app.get('/health', async (_req: Request, res: Response) => {
+  try {
+    const client = await pool.connect();
+    await client.query('SELECT NOW()');
+    client.release();
+    res.json({ status: 'ok', db: 'connected', ready: dbReady, timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: 'error', db: 'disconnected', ready: false, timestamp: new Date().toISOString() });
+  }
 });
 
 // API Routes per OpenAPI spec
@@ -106,19 +120,7 @@ app.use((_req: Request, res: Response) => {
 });
 
 async function startServer() {
-  try {
-    const client = await pool.connect();
-    await client.query('SELECT NOW()');
-    client.release();
-    console.log('✅ PostgreSQL connected');
-    await initDatabase();
-    console.log('✅ Database schema initialized');
-  } catch (err) {
-    console.error('❌ PostgreSQL connection failed:', (err as Error).message);
-    console.error('Make sure the database is running and DATABASE_URL is correct.');
-    process.exit(1);
-  }
-
+  // Start listening immediately — don't block on DB init
   app.listen(PORT, () => {
     const isDev = process.env.NODE_ENV !== 'production';
     const whatsappProvider = process.env.WHATSAPP_PROVIDER || 'meta';
@@ -131,6 +133,7 @@ API Endpoints:
   • GET  /api/v1/products          - Menu products
   • POST /api/v1/orders            - Create order
   • GET  /api/v1/orders            - List orders
+  • GET  /api/v1/events            - SSE real-time events
   • POST /api/v1/webhooks/whatsapp - WhatsApp webhook${isDev ? `
   • GET  /api/v1/webhooks/test     - Test bot (dev only)` : ''}
 
@@ -141,6 +144,27 @@ Bot Test:
   curl "http://localhost:${PORT}/api/v1/webhooks/test?phone=3123456789&message=hola"` : ''}
 `);
   });
+
+  // Initialize DB in the background so health checks respond immediately
+  try {
+    const client = await pool.connect();
+    await client.query('SELECT NOW()');
+    client.release();
+    console.log('✅ PostgreSQL connected');
+  } catch (err) {
+    console.error('❌ PostgreSQL connection failed:', (err as Error).message);
+    console.error('Make sure the database is running and DATABASE_URL is correct.');
+    return;
+  }
+
+  try {
+    await initDatabase();
+    dbReady = true;
+    console.log('✅ Database schema initialized');
+  } catch (err) {
+    console.error('❌ Database initialization failed:', (err as Error).message);
+    // Server keeps running — health check will show ready: false
+  }
 }
 
 startServer();
