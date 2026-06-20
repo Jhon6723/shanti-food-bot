@@ -1,32 +1,32 @@
 # Security Issues & Fixes
 
-Auditoría de seguridad realizada el 16/06/2026.
+Security audit performed on 16/06/2026.
 
 ---
 
-## Contexto de arquitectura
+## Architecture context
 
-La siguiente fase del proyecto incluye un **frontend de administración** (dashboard) que permitirá al administrador del restaurante:
-- Ver y gestionar pedidos en tiempo real
-- Cambiar estados de órdenes
-- Ver estadísticas del negocio
+The next project phase includes an **administration frontend** (dashboard) that will allow the restaurant administrator to:
+- View and manage orders in real time
+- Change order statuses
+- View business statistics
 
-Este frontend se autenticará con **JWT** contra el backend. Por lo tanto, las rutas de `/api/v1/orders` pasarán a estar protegidas por JWT en lugar de API key simple.
+This frontend will authenticate with **JWT** against the backend. Therefore, the `/api/v1/orders` routes will be protected by JWT instead of a simple API key.
 
 ---
 
-## 🔴 Críticas
+## 🔴 Critical
 
-### 1. Endpoint `/webhooks/test` sin autenticación
+### 1. Endpoint `/webhooks/test` without authentication
 
-**Archivo:** `src/api/routes/webhook.ts` — `GET /api/v1/webhooks/test`
+**File:** `src/api/routes/webhook.ts` — `GET /api/v1/webhooks/test`
 
-**Problema:** Cualquier persona en internet puede enviar mensajes a cualquier número de teléfono simulando ser ese usuario. Permite spam, manipulación de sesiones ajenas y enumeración de pedidos de clientes.
+**Problem:** Anyone on the internet can send messages to any phone number pretending to be that user. Allows spam, manipulation of other users' sessions, and enumeration of customer orders.
 
-**Fix:** Proteger con API key via header, o mejor aún, **eliminar en producción** y dejar solo en desarrollo.
+**Fix:** Protect with API key via header, or better yet, **remove in production** and leave only in development.
 
 ```typescript
-// Solo disponible en entorno de desarrollo
+// Only available in development environment
 if (process.env.NODE_ENV !== 'production') {
   router.get('/test', async (req, res) => { /* ... */ });
 }
@@ -34,34 +34,34 @@ if (process.env.NODE_ENV !== 'production') {
 
 ---
 
-### 2. API de órdenes sin autenticación → JWT (fase admin)
+### 2. Orders API without authentication → JWT (admin phase)
 
-**Archivo:** `src/api/routes/orders.ts`
+**File:** `src/api/routes/orders.ts`
 
-**Problema:**
-- `GET /api/v1/orders` — expone todos los pedidos con nombres, teléfonos y direcciones de clientes
-- `PATCH /api/v1/orders/:id` — cualquiera puede cancelar o modificar cualquier pedido
-- `GET /api/v1/orders/stats/dashboard` — datos internos del negocio públicos
+**Problem:**
+- `GET /api/v1/orders` — exposes all orders with customer names, phones, and addresses
+- `PATCH /api/v1/orders/:id` — anyone can cancel or modify any order
+- `GET /api/v1/orders/stats/dashboard` — internal business data is public
 
-**Fix — Fase admin frontend:** Autenticación JWT contra tabla `users` en PostgreSQL. Las credenciales se almacenan hasheadas con `bcrypt` — nunca en texto plano ni en variables de entorno.
+**Fix — Admin frontend phase:** JWT authentication against the `users` table in PostgreSQL. Credentials are stored hashed with `bcrypt` — never in plaintext or in environment variables.
 
 ```typescript
-// src/api/routes/auth.ts — nuevo endpoint de login
+// src/api/routes/auth.ts — new login endpoint
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
 router.post('/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password)
-    return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
+    return res.status(400).json({ error: 'Username and password required' });
 
   const user = await userRepository.findByUsername(username);
   if (!user || !user.active)
-    return res.status(401).json({ error: 'Credenciales inválidas' });
+    return res.status(401).json({ error: 'Invalid credentials' });
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid)
-    return res.status(401).json({ error: 'Credenciales inválidas' });
+    return res.status(401).json({ error: 'Invalid credentials' });
 
   const token = jwt.sign(
     { userId: user.id, role: user.role },
@@ -78,20 +78,20 @@ import jwt from 'jsonwebtoken';
 
 export function requireJWT(req: Request, res: Response, next: NextFunction) {
   const auth = req.headers.authorization;
-  if (!auth?.startsWith('Bearer ')) return res.status(401).json({ error: 'Token requerido' });
+  if (!auth?.startsWith('Bearer ')) return res.status(401).json({ error: 'Token required' });
   try {
     const payload = jwt.verify(auth.slice(7), process.env.JWT_SECRET!) as { userId: number; role: string };
-    (req as any).user = payload; // disponible en handlers
+    (req as any).user = payload; // available in handlers
     next();
   } catch {
-    res.status(401).json({ error: 'Token inválido o expirado' });
+    res.status(401).json({ error: 'Invalid or expired token' });
   }
 }
 
 export function requireRole(role: string) {
   return (req: Request, res: Response, next: NextFunction) => {
     if ((req as any).user?.role !== role)
-      return res.status(403).json({ error: 'Sin permisos suficientes' });
+      return res.status(403).json({ error: 'Insufficient permissions' });
     next();
   };
 }
@@ -104,24 +104,24 @@ app.use('/api/v1/users', requireJWT, requireRole('admin'), usersRouter);
 app.use('/api/v1/auth', authRouter);
 ```
 
-**Variables de entorno requeridas:**
+**Required environment variables:**
 ```
-JWT_SECRET=<string-aleatorio-256-bits>
+JWT_SECRET=<random-256-bit-string>
 ```
 
-**Nota 1:** `ADMIN_USER` / `ADMIN_PASSWORD` ya no se usan. El admin inicial se crea vía seed al inicializar la DB (ver sección de seed en `specs/admin-dashboard.md §9`).
+**Note 1:** `ADMIN_USER` / `ADMIN_PASSWORD` are no longer used. The initial admin is created via seed when initializing the DB (see seed section in `specs/admin-dashboard.md §9`).
 
-**Nota 2:** El webhook de WhatsApp NO debe requerir JWT ya que Meta lo llama automáticamente.
+**Note 2:** The WhatsApp webhook MUST NOT require JWT since Meta calls it automatically.
 
 ---
 
-### 3. Webhook de Meta sin verificación de firma HMAC
+### 3. Meta webhook without HMAC signature verification
 
-**Archivo:** `src/api/routes/webhook.ts` — `POST /api/v1/webhooks/whatsapp`
+**File:** `src/api/routes/webhook.ts` — `POST /api/v1/webhooks/whatsapp`
 
-**Problema:** El endpoint acepta cualquier request sin verificar que proviene realmente de Meta. Alguien puede enviar payloads falsos simulando mensajes de WhatsApp.
+**Problem:** The endpoint accepts any request without verifying that it actually comes from Meta. Someone can send fake payloads simulating WhatsApp messages.
 
-**Fix:** Validar el header `X-Hub-Signature-256` que Meta incluye en cada request.
+**Fix:** Validate the `X-Hub-Signature-256` header that Meta includes in every request.
 
 ```typescript
 import crypto from 'crypto';
@@ -140,41 +140,41 @@ function verifyMetaSignature(req: Request): boolean {
 
 router.post('/whatsapp', async (req, res) => {
   if (!verifyMetaSignature(req)) return res.sendStatus(403);
-  // ... resto del handler
+  // ... rest of handler
 });
 ```
 
-**Variables de entorno requeridas:**
+**Required environment variables:**
 ```
-WHATSAPP_APP_SECRET=<app-secret-de-meta-developers>
+WHATSAPP_APP_SECRET=<app-secret-from-meta-developers>
 ```
 
 ---
 
-## 🟡 Moderadas
+## 🟡 Moderate
 
-### 4. Mensajes de error exponen detalles internos
+### 4. Error messages expose internal details
 
-**Archivos:** `src/api/routes/orders.ts`, `src/api/routes/webhook.ts`
+**Files:** `src/api/routes/orders.ts`, `src/api/routes/webhook.ts`
 
-**Problema:** Los bloques `catch` retornan `(error as Error).message` directamente al cliente, exponiendo stack traces y errores de PostgreSQL.
+**Problem:** `catch` blocks return `(error as Error).message` directly to the client, exposing stack traces and PostgreSQL errors.
 
-**Fix:** Loggear internamente y retornar mensaje genérico.
+**Fix:** Log internally and return generic message.
 
 ```typescript
 } catch (error) {
   console.error('[orders] Error:', error);
-  res.status(500).json({ error: 'Error interno del servidor' });
+  res.status(500).json({ error: 'Internal server error' });
 }
 ```
 
 ---
 
-### 5. Sin rate limiting
+### 5. No rate limiting
 
-**Problema:** Un usuario puede enviar miles de mensajes seguidos, agotando recursos del servidor y la base de datos.
+**Problem:** A user can send thousands of messages in a row, exhausting server and database resources.
 
-**Fix:** Usar `express-rate-limit`.
+**Fix:** Use `express-rate-limit`.
 
 ```bash
 npm install express-rate-limit
@@ -184,9 +184,9 @@ npm install express-rate-limit
 import rateLimit from 'express-rate-limit';
 
 const webhookLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minuto
-  max: 30,             // máx 30 mensajes por minuto por IP
-  message: { error: 'Demasiadas solicitudes, intenta más tarde' },
+  windowMs: 60 * 1000, // 1 minute
+  max: 30,             // max 30 messages per minute per IP
+  message: { error: 'Too many requests, try again later' },
 });
 
 app.use('/api/v1/webhooks/whatsapp', webhookLimiter);
@@ -194,11 +194,11 @@ app.use('/api/v1/webhooks/whatsapp', webhookLimiter);
 
 ---
 
-### 6. Sin límite de longitud en inputs de sesión
+### 6. No length limit on session inputs
 
-**Archivo:** `src/bot/WhatsAppBot.ts`
+**File:** `src/bot/WhatsAppBot.ts`
 
-**Problema:** Campos como `session.address`, `session.customerName` y `session.deliveryNotes` aceptan texto libre sin límite de longitud.
+**Problem:** Fields like `session.address`, `session.customerName`, and `session.deliveryNotes` accept free text without length limits.
 
 **Fix:**
 
@@ -209,13 +209,13 @@ const text = message.text?.body.slice(0, MAX_INPUT).toLowerCase().trim() ?? '';
 
 ---
 
-## Prioridad de implementación
+## Implementation priority
 
-| Prioridad | Issue | Fase | Estado |
+| Priority | Issue | Phase | Status |
 |-----------|-------|------|--------|
-| 🔴 1 | Deshabilitar `/webhooks/test` en producción | Ahora | Pendiente |
-| 🔴 2 | JWT (tabla `users` + bcrypt) en rutas `/api/v1/orders` y `/api/v1/users` | Fase admin frontend | Pendiente |
-| 🔴 3 | Verificación de firma HMAC del webhook Meta | Ahora | Pendiente |
-| 🟡 4 | Sanitizar mensajes de error en producción | Ahora | Pendiente |
-| 🟡 5 | Rate limiting por IP | Ahora | Pendiente |
-| 🟡 6 | Límite de longitud en inputs de sesión | Ahora | Pendiente |
+| 🔴 1 | Disable `/webhooks/test` in production | Now | Pending |
+| 🔴 2 | JWT (`users` table + bcrypt) on `/api/v1/orders` and `/api/v1/users` routes | Admin frontend phase | Pending |
+| 🔴 3 | HMAC signature verification for Meta webhook | Now | Pending |
+| 🟡 4 | Sanitize error messages in production | Now | Pending |
+| 🟡 5 | Rate limiting by IP | Now | Pending |
+| 🟡 6 | Length limit on session inputs | Now | Pending |

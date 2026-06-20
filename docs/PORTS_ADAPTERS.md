@@ -1,34 +1,34 @@
-# Ports & Adapters en Shanti Food
+# Ports & Adapters in Shanti Food
 
-> Arquitectura Hexagonal aplicada al proyecto Shanti Food.
-> Explica por qué creamos `composition.ts`, los Repository Ports, y cómo el bot dejó de depender directamente de PostgreSQL.
-
----
-
-## 1. ¿Qué es Ports & Adapters?
-
-**Ports & Adapters** (también llamada *Arquitectura Hexagonal* o *Clean Architecture*) es un patrón que separa tu aplicación en capas y obliga a que las dependencias siempre apunten hacia el centro (el dominio), nunca hacia afuera (la infraestructura).
-
-### Analogía: Restaurante
-
-| Capa | Rol | Ejemplo en código |
-|------|-----|-------------------|
-| **Presentation** (`api/routes/`) | Mesero | Recibe pedidos del cliente (HTTP) |
-| **Application** (`application/`) | Jefe de cocina | Coordina quién hace qué (Services) |
-| **Business** (`bot/`) | Chef | Tiene la receta (lógica conversacional) |
-| **Domain** (`domain/`) | Receta | Define qué es un pedido, qué reglas cumple |
-| **Infrastructure** (`infrastructure/`) | Proveedor | Trae ingredientes (PostgreSQL, WhatsApp API) |
-
-> **Regla de oro:** El chef **nunca** va al mercado. El encargado de compras (`composition.ts`) le trae los ingredientes.
+> Hexagonal Architecture applied to the Shanti Food project.
+> Explains why we created `composition.ts`, the Repository Ports, and how the bot stopped depending directly on PostgreSQL.
 
 ---
 
-## 2. ¿Qué problema teníamos antes?
+## 1. What is Ports & Adapters?
 
-Antes del refactor, el bot importaba directamente los repositorios de PostgreSQL:
+**Ports & Adapters** (also called *Hexagonal Architecture* or *Clean Architecture*) is a pattern that separates your application into layers and forces dependencies to always point toward the center (the domain), never outward (infrastructure).
+
+### Analogy: Restaurant
+
+| Layer | Role | Code example |
+|------|------|-------------------|
+| **Presentation** (`api/routes/`) | Waiter | Receives orders from the customer (HTTP) |
+| **Application** (`application/`) | Head chef | Coordinates who does what (Services) |
+| **Business** (`bot/`) | Chef | Has the recipe (conversation logic) |
+| **Domain** (`domain/`) | Recipe | Defines what an order is, what rules it satisfies |
+| **Infrastructure** (`infrastructure/`) | Supplier | Brings ingredients (PostgreSQL, WhatsApp API) |
+
+> **Golden rule:** The chef **never** goes to the market. The purchasing manager (`composition.ts`) brings the ingredients.
+
+---
+
+## 2. What problem did we have before?
+
+Before the refactor, the bot directly imported PostgreSQL repositories:
 
 ```ts
-// ❌ bot/WhatsAppBot.ts (ANTES)
+// ❌ bot/WhatsAppBot.ts (BEFORE)
 import { orderRepository } from '../infrastructure/repositories/OrderRepository.js';
 import { productRepository } from '../infrastructure/repositories/ProductRepository.js';
 
@@ -41,19 +41,19 @@ export class WhatsAppBot {
 }
 ```
 
-### Problemas de esto:
+### Problems with this:
 
-1. **El bot sabe que usamos PostgreSQL.** Si mañana cambiamos a MongoDB, debemos tocar el bot.
-2. **No se puede testear fácilmente.** El bot siempre intenta conectar a la base de datos real.
-3. **Violación de capas.** `bot/` (negocio) depende de `infrastructure/` (PostgreSQL). Las flechas van para arriba, no para abajo.
+1. **The bot knows we use PostgreSQL.** If tomorrow we switch to MongoDB, we must touch the bot.
+2. **It cannot be easily tested.** The bot always tries to connect to the real database.
+3. **Layer violation.** `bot/` (business) depends on `infrastructure/` (PostgreSQL). Arrows go upward, not downward.
 
 ---
 
-## 3. La solución: Repository Ports
+## 3. The solution: Repository Ports
 
-### 3.1 Definir el contrato (el Port)
+### 3.1 Define the contract (the Port)
 
-Creamos una interfaz en `application/ports/` que dice **"todo repositorio de productos debe saber hacer esto"**:
+We create an interface in `application/ports/` that says **"every product repository must know how to do this"**:
 
 ```ts
 // src/application/ports/ProductRepositoryPort.ts
@@ -67,11 +67,11 @@ export interface ProductRepositoryPort {
 }
 ```
 
-> El **Port** es solo una interfaz. No sabe de SQL, no sabe de MongoDB. Es un contrato.
+> The **Port** is just an interface. It doesn't know SQL, it doesn't know MongoDB. It's a contract.
 
-### 3.2 Implementar el contrato (el Adapter)
+### 3.2 Implement the contract (the Adapter)
 
-El repositorio real dice "yo cumplo ese contrato":
+The real repository says "I fulfill that contract":
 
 ```ts
 // src/infrastructure/repositories/ProductRepository.ts
@@ -86,12 +86,12 @@ export class ProductRepository implements ProductRepositoryPort {
 }
 ```
 
-> El **Adapter** es la implementación concreta. Solo él sabe que usamos PostgreSQL.
+> The **Adapter** is the concrete implementation. Only it knows we use PostgreSQL.
 
-### 3.3 El bot depende solo del contrato
+### 3.3 The bot depends only on the contract
 
 ```ts
-// ✅ bot/WhatsAppBot.ts (DESPUÉS)
+// ✅ bot/WhatsAppBot.ts (AFTER)
 import type { ProductRepositoryPort } from '../application/ports/ProductRepositoryPort.js';
 import type { OrderRepositoryPort } from '../application/ports/OrderRepositoryPort.js';
 
@@ -109,15 +109,15 @@ export class WhatsAppBot {
 }
 ```
 
-> El bot **no sabe** de PostgreSQL. Solo sabe que existe algo que cumple el contrato `ProductRepositoryPort`.
+> The bot **doesn't know** about PostgreSQL. It only knows that something fulfills the `ProductRepositoryPort` contract.
 
 ---
 
-## 4. Composition Root: ¿quién conecta todo?
+## 4. Composition Root: who connects everything?
 
-El bot recibe los repositorios por constructor, pero ¿quién se los pasa?
+The bot receives repositories via constructor, but who passes them?
 
-### 4.1 `src/composition.ts` — La central eléctrica
+### 4.1 `src/composition.ts` — The power plant
 
 ```ts
 // src/composition.ts
@@ -131,21 +131,21 @@ export const bot = new WhatsAppBot(orderRepository, productRepository);
 export const webhookService = new WebhookService(getAdapter(), bot);
 ```
 
-### ¿Por qué es importante?
+### Why is it important?
 
-- Es el **único** archivo en toda la aplicación (fuera de Infrastructure) que importa desde `infrastructure/`.
-- Es donde "componés" tu app: unís las piezas como un LEGO.
-- Si mañana cambias PostgreSQL por MongoDB, **solo tocás este archivo**.
+- It's the **only** file in the entire application (outside Infrastructure) that imports from `infrastructure/`.
+- It's where you "compose" your app: you put pieces together like LEGO.
+- If tomorrow you switch PostgreSQL for MongoDB, **you only touch this file**.
 
-### Analogía
+### Analogy
 
-- `composition.ts` = el **encargado de compras** del restaurante.
-- Es la **única persona** que habla con los proveedores.
-- El chef le dice "necesito ingredientes" y el encargado se los trae.
+- `composition.ts` = the restaurant's **purchasing manager**.
+- It's the **only person** who talks to suppliers.
+- The chef says "I need ingredients" and the manager brings them.
 
 ---
 
-## 5. ¿Cómo quedó la arquitectura?
+## 5. How does the architecture look now?
 
 ```mermaid
 graph LR
@@ -182,100 +182,100 @@ graph LR
         COMP["composition.ts"]
     end
 
-    OR -->|usa| OS
-    WH -->|usa| WS
-    OS -->|llama| ORI
-    WS -->|llama| BOT
-    WS -->|llama| WAA
-    BOT -->|depende de| ORP
-    BOT -->|depende de| PRP
-    ORI -->|implementa| ORP
-    PRI -->|implementa| PRP
-    WAA -->|implementa| WAP
-    ORI -->|lee/escribe| DB
-    WAA -->|envía| WAPI
-    COMP -->|inyecta| BOT
-    COMP -->|inyecta| WS
-    COMP -->|provee| ORI
-    COMP -->|provee| PRI
-    COMP -->|provee| WAA
-    BOT -->|usa| DOM
+    OR -->|uses| OS
+    WH -->|uses| WS
+    OS -->|calls| ORI
+    WS -->|calls| BOT
+    WS -->|calls| WAA
+    BOT -->|depends on| ORP
+    BOT -->|depends on| PRP
+    ORI -->|implements| ORP
+    PRI -->|implements| PRP
+    WAA -->|implements| WAP
+    ORI -->|reads/writes| DB
+    WAA -->|sends| WAPI
+    COMP -->|injects| BOT
+    COMP -->|injects| WS
+    COMP -->|provides| ORI
+    COMP -->|provides| PRI
+    COMP -->|provides| WAA
+    BOT -->|uses| DOM
 ```
 
-### Regla visual
+### Visual rule
 
-- **Las flechas solo apuntan hacia abajo o hacia Ports.**
-- Nunca de `bot/` a `infrastructure/` directamente (salvo en `composition.ts`).
-- Nunca de `api/` a `infrastructure/` directamente.
+- **Arrows only point downward or toward Ports.**
+- Never from `bot/` to `infrastructure/` directly (except in `composition.ts`).
+- Never from `api/` to `infrastructure/` directly.
 
 ---
 
-## 6. ¿Cómo se testea ahora?
+## 6. How is testing done now?
 
-### Antes (difícil)
+### Before (hard)
 
 ```ts
-// ❌ Antes: el bot siempre usaba PostgreSQL real
-const bot = new WhatsAppBot(); // conecta a la BD
+// ❌ Before: the bot always used real PostgreSQL
+const bot = new WhatsAppBot(); // connects to DB
 ```
 
-### Después (trivial)
+### After (trivial)
 
 ```ts
-// ✅ Ahora: pasás mocks que cumplen el contrato
+// ✅ Now: you pass mocks that fulfill the contract
 const orderRepo = {
   save: vi.fn().mockResolvedValue(undefined),
   findById: vi.fn().mockResolvedValue(undefined),
-  // ...todos los métodos del port
+  // ...all methods from the port
 };
 
 const productRepo = {
   findAll: vi.fn().mockResolvedValue(mockProducts),
   findById: vi.fn().mockResolvedValue(mockProduct),
-  // ...todos los métodos del port
+  // ...all methods from the port
 };
 
 const bot = new WhatsAppBot(orderRepo, productRepo);
-// El bot funciona igual, sin tocar PostgreSQL
+// The bot works the same, without touching PostgreSQL
 ```
 
-> Como el bot solo depende de la **interfaz**, no le importa si le pasás el repo real o un mock. Ambos cumplen el contrato.
+> Because the bot only depends on the **interface**, it doesn't care if you pass the real repo or a mock. Both fulfill the contract.
 
 ---
 
-## 7. Comparación: Antes vs Después
+## 7. Comparison: Before vs After
 
-| Aspecto | Antes | Después |
+| Aspect | Before | After |
 |---------|-------|---------|
-| **Bot y PostgreSQL** | Acoplados (imports directos) | Desacoplados (via ports) |
-| **Cambiar de BD** | Tocar todo el bot | Solo tocar `composition.ts` |
-| **Tests** | Necesitás mockear módulos | Pasás mocks por constructor |
-| **Capas** | Mezcladas | Limpias y separadas |
-| **Imports desde `api/`** | `infrastructure/` directo | Solo vía `application/` |
+| **Bot and PostgreSQL** | Coupled (direct imports) | Decoupled (via ports) |
+| **Change database** | Touch the whole bot | Only touch `composition.ts` |
+| **Tests** | You need to mock modules | Pass mocks via constructor |
+| **Layers** | Mixed | Clean and separated |
+| **Imports from `api/`** | `infrastructure/` directly | Only via `application/` |
 
 ---
 
-## 8. Archivos clave del refactor
+## 8. Key refactor files
 
-| Archivo | Rol |
+| File | Role |
 |---------|-----|
-| `src/application/ports/OrderRepositoryPort.ts` | Contrato para repos de órdenes |
-| `src/application/ports/ProductRepositoryPort.ts` | Contrato para repos de productos |
-| `src/infrastructure/repositories/OrderRepository.ts` | Implementación PostgreSQL del port |
-| `src/infrastructure/repositories/ProductRepository.ts` | Implementación PostgreSQL del port |
-| `src/composition.ts` | Wiring de dependencias (composition root) |
-| `src/bot/WhatsAppBot.ts` | Solo depende de los ports |
-| `src/application/OrderService.ts` | Medio entre API y repo |
-| `src/application/WebhookService.ts` | Medio entre API y bot/adapter |
+| `src/application/ports/OrderRepositoryPort.ts` | Contract for order repos |
+| `src/application/ports/ProductRepositoryPort.ts` | Contract for product repos |
+| `src/infrastructure/repositories/OrderRepository.ts` | PostgreSQL implementation of the port |
+| `src/infrastructure/repositories/ProductRepository.ts` | PostgreSQL implementation of the port |
+| `src/composition.ts` | Dependency wiring (composition root) |
+| `src/bot/WhatsAppBot.ts` | Only depends on ports |
+| `src/application/OrderService.ts` | Mediator between API and repo |
+| `src/application/WebhookService.ts` | Mediator between API and bot/adapter |
 
 ---
 
-## 9. Conclusión
+## 9. Conclusion
 
-**Ports & Adapters** no es solo un patrón fancy — es una herramienta práctica que:
+**Ports & Adapters** is not just a fancy pattern — it's a practical tool that:
 
-1. **Protege tu código de cambios externos.** Si WhatsApp cambia su API, solo tocas el adapter. Si cambias de PostgreSQL a MongoDB, solo tocas el repositorio.
-2. **Hace los tests instantáneos.** Mocks por constructor, sin módulos, sin hacks.
-3. **Obliga a pensar en capas.** Cada archivo sabe exactamente qué puede usar y qué no.
+1. **Protects your code from external changes.** If WhatsApp changes its API, you only touch the adapter. If you switch from PostgreSQL to MongoDB, you only touch the repository.
+2. **Makes tests instantaneous.** Mocks via constructor, no modules, no hacks.
+3. **Forces you to think in layers.** Each file knows exactly what it can use and what it can't.
 
-> La regla más simple: **si tu archivo importa de `infrastructure/`, probablemente debería estar en `composition.ts`.**
+> The simplest rule: **if your file imports from `infrastructure/`, it should probably be in `composition.ts`.**

@@ -1,54 +1,54 @@
-# Problemas Conocidos y Roadmap
+# Known Issues and Roadmap
 
-## Estado: v1.3 — Pedidos paginados + seguridad documentada
-
----
-
-## ✅ Arreglado en v1.1
-
-| # | Problema | Fix |
-|---|----------|-----|
-| 1 | Nombre del cliente hardcodeado | Paso `name` + recuperación de DB para clientes recurrentes |
-| 2 | Personalizaciones limitadas a una | `handleCustomization` parsea números separados por coma (`1,3`) |
-| 3 | Sin opción de "atras" o "cancelar" | Todos los handlers aceptan `0`, `atras` o `volver` |
-| 4 | Modificar pedido no implementado | `handleModify` con 4 opciones funcionales |
-| 5 | Búsqueda de producto por nombre frágil | Lista numerada en `showProductList()`, selección por número |
-| 6 | Input inválido confirma/cambia pedido | Validación estricta en `delivery_type`, `payment`, `confirm` |
-| 7 | Phone normalization inconsistente | `handleMessage` normaliza `573011758999` → `3011758999`. DB busca los 3 formatos. |
-| 8 | Carrito vacío al hacer "atras" en add_more | Protección contra `pop()` en array vacío |
-
-## ✅ Arreglado en v1.2
-
-| # | Problema | Fix |
-|---|----------|-----|
-| 9 | Dirección no validada (solo longitud) | Regex completo para formatos colombianos — barrio/sector obligatorio en direcciones de calle |
-| 10 | Modificar pedido pedía dirección de nuevo | `handleAddMore` salta `delivery_type` si `session.type` ya está definido |
-| 11 | Dirección del restaurante hardcodeada | Variable de entorno `BUSINESS_ADDRESS` con fallback |
-| 12 | Sin paso de notas de entrega | Nuevo step `delivery_notes` (opcional, se puede omitir) |
-| 13 | Sin reutilización de dirección previa | Consulta a DB al elegir domicilio — step `address_confirm` si hay dirección previa |
-
-## ✅ Arreglado en v1.3
-
-| # | Problema | Fix |
-|---|----------|-----|
-| 14 | Estado de pedido mostraba solo una orden | `findAllPendingByCustomer` + vista detalle + lista compacta paginada |
+## Status: v1.3 — Paginated orders + documented security
 
 ---
 
-## � Production Infrastructure Issues
+## ✅ Fixed in v1.1
+
+| # | Problem | Fix |
+|---|---------|-----|
+| 1 | Hardcoded customer name | Pass `name` + DB recovery for returning customers |
+| 2 | Customizations limited to one | `handleCustomization` parses comma-separated numbers (`1,3`) |
+| 3 | No "back" or "cancel" option | All handlers accept `0`, `atras` or `volver` |
+| 4 | Modify order not implemented | `handleModify` with 4 functional options |
+| 5 | Fragile product search by name | Numbered list in `showProductList()`, selection by number |
+| 6 | Invalid input confirms/changes order | Strict validation on `delivery_type`, `payment`, `confirm` |
+| 7 | Inconsistent phone normalization | `handleMessage` normalizes `573011758999` → `3011758999`. DB searches all 3 formats. |
+| 8 | Empty cart on "back" in add_more | Protection against `pop()` on empty array |
+
+## ✅ Fixed in v1.2
+
+| # | Problem | Fix |
+|---|---------|-----|
+| 9 | Address not validated (length only) | Complete regex for Colombian formats — neighborhood/sector required for street addresses |
+| 10 | Modify order asked for address again | `handleAddMore` skips `delivery_type` if `session.type` is already set |
+| 11 | Hardcoded restaurant address | Environment variable `BUSINESS_ADDRESS` with fallback |
+| 12 | No delivery notes step | New step `delivery_notes` (optional, can be skipped) |
+| 13 | No previous address reuse | DB query when choosing delivery — `address_confirm` step if previous address exists |
+
+## ✅ Fixed in v1.3
+
+| # | Problem | Fix |
+|---|---------|-----|
+| 14 | Order status showed only one order | `findAllPendingByCustomer` + detail view + compact paginated list |
+
+---
+
+## Production Infrastructure Issues
 
 ### I1. 504 Gateway Timeout after deploy (Coolify + Traefik)
 
-**Síntomas**
+**Symptoms**
 - `curl https://shanti-bot.pixpro.lat/health` returns `504 Gateway Timeout`
 - Direct access via IP: `curl http://178.105.185.165:3000/health` works fine
 - Container shows `Up (healthy)` in `docker ps`
 - Traefik returns `503 "no available server"` or hangs indefinitely
 
-**Causa**
+**Cause**
 Coolify uses Traefik as a reverse proxy. When a new container is deployed, Traefik sometimes fails to update its routing table to point to the new container. It continues routing to the old (destroyed) container, causing a `504`.
 
-**Diagnóstico**
+**Diagnosis**
 ```bash
 # Check if the app container is actually running
 ssh root@178.105.185.165
@@ -63,7 +63,7 @@ curl -v https://shanti-bot.pixpro.lat/health
 # Failing: hangs or returns 504
 ```
 
-**Fix inmediato**
+**Immediate fix**
 ```bash
 ssh root@178.105.185.165
 docker restart coolify-proxy
@@ -71,7 +71,7 @@ sleep 5
 curl -s https://shanti-bot.pixpro.lat/health
 ```
 
-**Mitigación (ya aplicada)**
+**Mitigation (already applied)**
 - Added `healthcheck` to the `app` service in `docker-compose.yml`
 - Uses `wget --spider` (node:22-alpine does not include `curl`)
 - Prevents Coolify from destroying the container when it takes time to start
@@ -87,11 +87,11 @@ services:
       start_period: 60s
 ```
 
-**⚠️ Nota:** The healthcheck prevents Coolify from killing the container, but it does **NOT** fix the Traefik routing bug. The `504` can still happen after every deploy because Traefik sometimes fails to detect the new container. This is a Coolify/Traefik issue, not application code.
+**⚠️ Note:** The healthcheck prevents Coolify from killing the container, but it does **NOT** fix the Traefik routing bug. The `504` can still happen after every deploy because Traefik sometimes fails to detect the new container. This is a Coolify/Traefik issue, not application code.
 
-**Nota:** If the healthcheck itself fails (e.g., wrong tool or wrong port), Coolify destroys the container completely (`docker ps -a` will not show it). Always check `docker ps` first.
+**Note:** If the healthcheck itself fails (e.g., wrong tool or wrong port), Coolify destroys the container completely (`docker ps -a` will not show it). Always check `docker ps` first.
 
-**Fix permanente (en código)**
+**Permanent fix (in code)**
 Implemented graceful shutdown in `src/index.ts` to mitigate Traefik's routing bug during rolling updates:
 
 1. On `SIGTERM` (sent by Coolify during deploy), the app sets `isShuttingDown = true`
@@ -103,21 +103,21 @@ This is a workaround for Coolify issue #8627 — during rolling updates, Traefik
 
 ### I2. Admin dashboard still polling after SSE deploy
 
-**Síntomas**
+**Symptoms**
 - `GET /api/v1/orders` requests every ~5 seconds appear in server logs
 - The `useOrdersWithSound()` hook includes SSE via `EventSource`
 - Production still behaves like the old polling version
 
-**Causa**
+**Cause**
 The admin dashboard is a PWA with a Service Worker (`sw.js`) that aggressively caches JS assets. After a deploy, the browser continues running the old cached code because the Service Worker never updated itself.
 
-**Fix inmediato (por usuario)**
+**Immediate fix (by user)**
 1. Open `https://shanti-bot.pixpro.lat/admin`
 2. **F12 → DevTools → Application → Service Workers**
 3. Click **"Unregister"** on the active Service Worker
 4. **Ctrl+Shift+R** (hard reload) — forces fresh assets
 
-**Fix permanente (en código)**
+**Permanent fix (in code)**
 Added a small inline script to `admin/index.html` that forces the Service Worker to check for updates on every page load:
 
 ```html
@@ -134,26 +134,26 @@ This calls `registration.update()` which checks the server for a new `sw.js`. If
 
 ### I3. OpenWAAdapter notifications fail with 500 error
 
-**Síntomas**
+**Symptoms**
 - Bot replies work fine (messages sent via webhook)
 - Order status change notifications fail: `[OpenWAAdapter] Failed to send message: {"statusCode":500,"message":"Internal server error"}`
 - Admin dashboard shows status change succeeds, but WhatsApp message never arrives
 
-**Causa técnica**
-OpenWA usa dos tipos de identificadores para usuarios de WhatsApp:
+**Technical cause**
+OpenWA uses two types of identifiers for WhatsApp users:
 
-1. **JID de teléfono** (usuarios normales): `573011758999@c.us`
-2. **LID (Long ID)** (ciertos usuarios): `178327646171353@lid`
+1. **Phone JID** (normal users): `573011758999@c.us`
+2. **LID (Long ID)** (certain users): `178327646171353@lid`
 
-El webhook de OpenWA siempre incluye el `chatId` original (LID si aplica). Antes del fix, este `chatId` se usaba para responder al mensaje inmediato, pero **no se persistía** con la orden.
+The OpenWA webhook always includes the original `chatId` (LID if applicable). Before the fix, this `chatId` was used to reply to the immediate message, but **was not persisted** with the order.
 
-Cuando el admin cambiaba el estado de una orden, la app construía un JID de teléfono desde el número guardado (`+573011758999` → `573011758999@c.us`). Para usuarios LID, OpenWA rechaza este JID con 500 error porque requiere el LID.
+When the admin changed an order's status, the app constructed a phone-based JID from the saved number (`+573011758999` → `573011758999@c.us`). For LID users, OpenWA rejects this JID with a 500 error because it requires the LID.
 
-**Analogía de bidireccionalidad**
-- **Antes (unidireccional)**: Usuario → bot (webhook con LID) → bot responde usando LID ✅. Pero Admin → bot (notificación) → bot usaba teléfono → fallaba para LID users ❌
-- **Ahora (bidireccional)**: El webhook nos da la "llave" (LID), la guardamos, y la reutilizamos para todas las comunicaciones con ese usuario.
+**Bidirectionality analogy**
+- **Before (unidirectional)**: User → bot (webhook with LID) → bot replies using LID ✅. But Admin → bot (notification) → bot used phone → failed for LID users ❌
+- **Now (bidirectional)**: The webhook gives us the "key" (LID), we save it, and reuse it for all communications with that user.
 
-**Fix implementado**
+**Fix implemented**
 Persist the original `chatId` from the webhook and use it for all WhatsApp communications:
 
 1. Added `chatId?: string` to `CustomerData` interface and `Customer` class
@@ -164,7 +164,7 @@ Persist the original `chatId` from the webhook and use it for all WhatsApp commu
 6. `WhatsAppSender.sendWhatsAppMessage` accepts optional `chatId` parameter
 7. `notifyCustomer` in orders route uses `order.customer.chatId` if available
 
-**Notas**
+**Notes**
 - Backward compatible: works with Meta adapter (no `chatId` in payload)
 - Existing orders without `chatId` will continue using phone-based JID (may fail for LID users)
 - New orders created after this fix will have the correct `chatId` stored
@@ -172,45 +172,45 @@ Persist the original `chatId` from the webhook and use it for all WhatsApp commu
 
 ---
 
-## �� Pendiente
+## Pending
 
-### P1. Sin manejo de ubicación GPS
-**Problema**: `handleAddress` solo acepta texto. No procesa `message.location` de WhatsApp.
-**Impacto**: Usuario no puede compartir ubicación en vivo para domicilio.
-**Solución**: Procesar `type: 'location'` en el webhook y extraer coordenadas.
+### P1. No GPS location handling
+**Problem**: `handleAddress` only accepts text. Does not process `message.location` from WhatsApp.
+**Impact**: User cannot share live location for delivery.
+**Solution**: Process `type: 'location'` in the webhook and extract coordinates.
 
-### P2. Sin plantillas de mensajes aprobados (Meta)
-**Problema**: Para notificaciones iniciadas por el negocio, Meta requiere plantillas pre-aprobadas.
-**Impacto**: El bot no puede notificar proactivamente al cliente cuando el pedido está listo.
-**Solución**: Crear plantillas en Meta Business Manager. Cubierto parcialmente por el **admin dashboard** (fase siguiente).
+### P2. No approved message templates (Meta)
+**Problem**: For business-initiated notifications, Meta requires pre-approved templates.
+**Impact**: The bot cannot proactively notify the client when the order is ready.
+**Solution**: Create templates in Meta Business Manager. Partially covered by the **admin dashboard** (next phase).
 
-### P3. Sesiones en memoria (no persistentes)
-**Problema**: `sessions = new Map<string, Session>()` se pierde si el servidor reinicia.
-**Impacto**: Usuario a mitad de pedido pierde progreso.
-**Solución**: Migrar sesiones a Redis o PostgreSQL.
+### P3. In-memory sessions (not persistent)
+**Problem**: `sessions = new Map<string, Session>()` is lost if the server restarts.
+**Impact**: User in the middle of an order loses progress.
+**Solution**: Migrate sessions to Redis or PostgreSQL.
 
-### P4. Sin validación de horario de atención
-**Problema**: El bot acepta pedidos 24/7.
-**Impacto**: Pedidos en horario cerrado que nadie va a preparar.
-**Solución**: Variable de entorno `BUSINESS_HOURS` y rechazo fuera de horario.
+### P4. No business hours validation
+**Problem**: The bot accepts orders 24/7.
+**Impact**: Orders placed during closed hours that nobody will prepare.
+**Solution**: Environment variable `BUSINESS_HOURS` and rejection outside hours.
 
-### P5. Pedidos grandes sin revisión humana
-**Problema**: Pedidos con `total >= 50000` o más de 3 ítems quedan en `pending` sin que nadie los revise.
-**Impacto**: Pedidos grandes pueden quedar olvidados.
-**Solución**: **Admin dashboard** (fase siguiente) — el administrador verá y gestionará estos pedidos.
+### P5. Large orders without human review
+**Problem**: Orders with `total >= 50000` or more than 3 items remain in `pending` without anyone reviewing them.
+**Impact**: Large orders can be forgotten.
+**Solution**: **Admin dashboard** (next phase) — the administrator will see and manage these orders.
 
-### P6. API de órdenes sin autenticación
-**Problema**: Ver `docs/SECURITY.md` — issues #1, #2, #3.
-**Solución**: JWT en fase admin dashboard + verificación HMAC webhook Meta.
+### P6. Orders API without authentication
+**Problem**: See `docs/SECURITY.md` — issues #1, #2, #3.
+**Solution**: JWT in admin dashboard phase + Meta webhook HMAC verification.
 
 ---
 
 ## Roadmap
 
-| Versión | Objetivo | Issues |
-|---------|----------|--------|
-| v1.1 | Flujo robusto | #1–8 ✅ |
-| v1.2 | UX mejorada + validaciones | #9–13 ✅ |
-| v1.3 | Estado paginado | #14 ✅ |
-| v1.4 | **Admin dashboard (en progreso)** | P5, P6 — JWT + CRUD pedidos + estadísticas |
-| v2.0 | Producción | P2, P3, P4 — plantillas Meta, sesiones persistentes, horarios |
+| Version | Goal | Issues |
+|---------|------|--------|
+| v1.1 | Robust flow | #1–8 ✅ |
+| v1.2 | Improved UX + validations | #9–13 ✅ |
+| v1.3 | Paginated status | #14 ✅ |
+| v1.4 | **Admin dashboard (in progress)** | P5, P6 — JWT + order CRUD + statistics |
+| v2.0 | Production | P2, P3, P4 — Meta templates, persistent sessions, business hours |

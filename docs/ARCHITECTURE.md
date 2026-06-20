@@ -1,251 +1,251 @@
-# Arquitectura de Shanti Food Bot
+# Shanti Food Bot Architecture
 
-## Vision General
+## Overview
 
-Sistema de pedidos por WhatsApp para Arroceria Shanti. **Monorepo** con backend Express (existente) y frontend PWA de administración (en desarrollo). Construido con **Spec Driven Development** y **TypeScript**.
+WhatsApp ordering system for Arroceria Shanti. **Monorepo** with Express backend (existing) and admin PWA frontend (in development). Built with **Spec Driven Development** and **TypeScript**.
 
-## Capas
+## Layers
 
 ```
 ┌─────────────────────────────────────────┐
-│  Cliente WhatsApp                       │
-│  (mensaje de texto)                     │
+│  WhatsApp Client                        │
+│  (text message)                         │
 └──────────┬──────────────────────────────┘
            │ Webhook HTTPS
            ▼
 ┌─────────────────────────────────────────┐
 │  WhatsApp Provider (configurable)       │
 │  meta:   Meta Cloud API                 │
-│  openwa: Gateway OpenWA (self-hosted)   │
+│  openwa: OpenWA Gateway (self-hosted)   │
 └──────────┬──────────────────────────────┘
            │ POST /api/v1/webhooks/whatsapp
            ▼
 ┌─────────────────────────────────────────┐
 │  Express API (src/api/routes/)          │
-│  • webhook.ts  — recibe mensajes         │
-│  • orders.ts   — CRUD pedidos (JWT)      │
-│  • events.ts   — SSE (tiempo real)       │
-│  • products.ts — listar menu             │
-│  • auth.ts     — login + JWT (nuevo)     │
-│  • users.ts    — CRUD usuarios (nuevo)   │
-│  • /admin      — sirve PWA estática      │
+│  • webhook.ts  — receives messages       │
+│  • orders.ts   — order CRUD (JWT)        │
+│  • events.ts   — SSE (real-time)         │
+│  • products.ts — list menu               │
+│  • auth.ts     — login + JWT (new)       │
+│  • users.ts    — user CRUD (new)         │
+│  • /admin      — serves static PWA       │
 └──────────┬──────────────────────────────┘
            │
            ▼
 ┌─────────────────────────────────────────┐
 │  Bot Layer (src/bot/WhatsAppBot.ts)     │
-│  Session management + conversational FSM  │
+│  Session management + conversational FSM │
 └──────────┬──────────────────────────────┘
            │
            ▼
 ┌─────────────────────────────────────────┐
-│  Domain Layer (src/domain/models/)        │
-│  • Order.ts   — entidad + reglas          │
-│  • Product.ts — catalogo + busqueda       │
+│  Domain Layer (src/domain/models/)      │
+│  • Order.ts   — entity + rules           │
+│  • Product.ts — catalog + search         │
 └──────────┬──────────────────────────────┘
            │
            ▼
 ┌─────────────────────────────────────────┐
-│  Infrastructure Layer                     │
-│  • OrderRepository.ts  — PostgreSQL       │
-│  • UserRepository.ts   — PostgreSQL       │
-│  • connection.ts       — Pool pg          │
-│  • whatsapp/           — Adapter pattern  │
-│    ├ adapter.ts         — Interfaz        │
-│    ├ meta/MetaAdapter   — Meta Cloud API  │
-│    └ openwa/OpenWA      — Gateway OpenWA  │
+│  Infrastructure Layer                   │
+│  • OrderRepository.ts  — PostgreSQL      │
+│  • UserRepository.ts   — PostgreSQL      │
+│  • connection.ts       — pg pool         │
+│  • whatsapp/           — Adapter pattern │
+│    ├ adapter.ts         — Interface      │
+│    ├ meta/MetaAdapter   — Meta Cloud API │
+│    └ openwa/OpenWA      — OpenWA Gateway │
 └─────────────────────────────────────────┘
 ```
 
-## Estructura del Monorepo
+## Monorepo Structure
 
 ```
 shanti-food/
-  src/                     ← backend Express
-  tests/                   ← tests unitarios e integración
-  admin/                   ← PWA admin (React + Vite)
-  specs/                   ← SDD y OpenAPI
-  docs/                    ← documentación
+  src/                     ← Express backend
+  tests/                   ← unit and integration tests
+  admin/                   ← admin PWA (React + Vite)
+  specs/                   ← SDD and OpenAPI
+  docs/                    ← documentation
   package.json
   docker-compose.yml
   .env
 ```
 
-Ver `specs/admin-dashboard.md §11` para la estructura detallada y configuración de Coolify.
+See `specs/admin-dashboard.md §11` for detailed structure and Coolify configuration.
 
-## Despliegue (Hetzner + Coolify)
+## Deployment (Hetzner + Coolify)
 
-- Un solo servicio en Coolify
-- Express compila y sirve el frontend estático desde `GET /admin`
-- Build command: `npm run build` (compila `admin/` + TypeScript backend)
+- Single service in Coolify
+- Express compiles and serves the static frontend from `GET /admin`
+- Build command: `npm run build` (compiles `admin/` + TypeScript backend)
 - Start command: `npm start`
 
-## Flujo de Mensaje Entrante
+## Incoming Message Flow
 
-1. Usuario envía mensaje al número WhatsApp conectado
-2. El proveedor activo (`WHATSAPP_PROVIDER`) hace POST al webhook con payload JSON
-3. `webhook.ts` obtiene el adapter via `getAdapter()` y verifica la firma (si hay secret)
-4. `adapter.parseIncoming(req)` normaliza el payload a `WhatsAppWebhookPayload[]`
-5. Llama `bot.handleMessage(phone, {text})`
-6. Bot consulta/crea sesion en memoria (`Map<string, Session>`)
-7. Segun `session.step`, ejecuta handler correspondiente
-8. Genera respuesta de texto
-9. `adapter.sendMessage(phone, text, {chatId})` envia respuesta via el proveedor activo
-10. Guarda pedido en PostgreSQL al confirmar
+1. User sends message to the connected WhatsApp number
+2. The active provider (`WHATSAPP_PROVIDER`) POSTs to the webhook with JSON payload
+3. `webhook.ts` gets the adapter via `getAdapter()` and verifies the signature (if secret exists)
+4. `adapter.parseIncoming(req)` normalizes the payload to `WhatsAppWebhookPayload[]`
+5. Calls `bot.handleMessage(phone, {text})`
+6. Bot queries/creates session in memory (`Map<string, Session>`)
+7. According to `session.step`, executes the corresponding handler
+8. Generates text response
+9. `adapter.sendMessage(phone, text, {chatId})` sends response via the active provider
+10. Saves order in PostgreSQL upon confirmation
 
-Ver `specs/whatsapp-adapter.md` para detalle del patron Adapter.
+See `specs/whatsapp-adapter.md` for Adapter pattern details.
 
-## Flujo Conversacional (FSM)
+## Conversational Flow (FSM)
 
 ```
-null (bienvenida)
+null (welcome)
   ├─ "hola" → reset + welcomeMessage()
   ├─ "1/menu" → menu
-  ├─ "2/pedido" → name (nuevo) | product (cliente recurrente)
-  ├─ "3/estado" → checkOrderStatus() → [order_status si hay paginación]
-  ├─ "4/humano" → conectar
-  └─ "estado" (keyword) → checkOrderStatus() desde cualquier step
+  ├─ "2/order" → name (new) | product (returning customer)
+  ├─ "3/status" → checkOrderStatus() → [order_status if pagination]
+  ├─ "4/human" → connect
+  └─ "status" (keyword) → checkOrderStatus() from any step
 
 name → product → customization → quantity → add_more
-  └─ 1 (si) → product
+  └─ 1 (yes) → product
   └─ 2 (no) → delivery_type
-        ├─ 1 (domicilio, con dir. previa) → address_confirm
-        │     ├─ 1 (reusar) → delivery_notes → payment → confirm
-        │     └─ 2 (nueva)  → address → delivery_notes → payment → confirm
-        ├─ 1 (domicilio, sin dir. previa) → address → delivery_notes → payment → confirm
-        └─ 2 (recoger) → payment → confirm
+        ├─ 1 (delivery, with prev. address) → address_confirm
+        │     ├─ 1 (reuse) → delivery_notes → payment → confirm
+        │     └─ 2 (new)   → address → delivery_notes → payment → confirm
+        ├─ 1 (delivery, no prev. address) → address → delivery_notes → payment → confirm
+        └─ 2 (pickup) → payment → confirm
 
 confirm
-  ├─ 1 (confirmar) → guardar en DB → fin
-  ├─ 2 (cancelar)  → reset
-  └─ 3 (modificar) → modify
-        ├─ 1 (agregar)   → product → ... → confirm (salta delivery_type si ya hay tipo)
-        ├─ 2 (quitar)    → selección → confirm
-        ├─ 3 (dirección) → address → confirm
-        └─ 4 (cancelar)  → reset
+  ├─ 1 (confirm) → save to DB → end
+  ├─ 2 (cancel)  → reset
+  └─ 3 (modify) → modify
+        ├─ 1 (add)    → product → ... → confirm (skips delivery_type if type already set)
+        ├─ 2 (remove) → selection → confirm
+        ├─ 3 (address) → address → confirm
+        └─ 4 (cancel)  → reset
 
-order_status (paginación activa)
-  ├─ 1 (ver más) → siguiente página de pedidos activos
-  └─ 0 (volver)  → menú principal
+order_status (active pagination)
+  ├─ 1 (see more) → next page of active orders
+  └─ 0 (back)     → main menu
 ```
 
 ## Session State
 
 ```typescript
 interface SessionState {
-  step: BotStep;                    // paso actual del FSM
-  items: OrderItemData[];           // productos en carrito
-  subtotal: number;                 // suma sin domicilio
-  total: number;                    // total final
+  step: BotStep;                    // current FSM step
+  items: OrderItemData[];           // products in cart
+  subtotal: number;                 // sum without delivery
+  total: number;                    // final total
   type: OrderType | null;           // delivery | pickup
-  address: string | null;           // dirección de entrega actual
-  lastAddress: string | null;       // última dirección usada (desde DB)
-  deliveryNotes: string | null;     // notas opcionales de entrega
+  address: string | null;           // current delivery address
+  lastAddress: string | null;       // last address used (from DB)
+  deliveryNotes: string | null;     // optional delivery notes
   paymentMethod: PaymentMethod | null;
-  currentProduct: Product | null;   // producto en selección
-  pendingItem: OrderItemData | null; // item siendo configurado
-  customerName: string | null;      // nombre del cliente
-  orderStatusCache: Order[] | null; // pedidos activos cacheados para paginación
-  orderStatusPage: number;          // página actual de paginación (0-indexed)
+  currentProduct: Product | null;   // product being selected
+  pendingItem: OrderItemData | null; // item being configured
+  customerName: string | null;      // customer name
+  orderStatusCache: Order[] | null; // cached active orders for pagination
+  orderStatusPage: number;          // current pagination page (0-indexed)
 }
 ```
 
-## Reglas de Dependencia (Layered Architecture)
+## Dependency Rules (Layered Architecture)
 
-Las flechas de import apuntan **hacia abajo**. Nunca al revés.
+Import arrows point **downward**. Never the other way.
 
 ```
 Presentation (api/)
-    ↓ importa
+    ↓ imports
 Application (bot/)
-    ↓ importa
+    ↓ imports
 Domain (domain/)
-    ← (pura — no importa de arriba)
+    ← (pure — doesn't import from above)
 Infrastructure (infrastructure/)
-    ← (implementación — no importa de arriba)
+    ← (implementation — doesn't import from above)
 ```
 
-### Reglas
+### Rules
 
-| Capa | Puede importar de | No puede importar de |
+| Layer | Can import from | Cannot import from |
 |------|-------------------|---------------------|
-| `api/` (routes, controllers, middleware) | `bot/`, `domain/`, `types/` | `infrastructure/` directamente (debe pasar por Application) |
-| `bot/` (WhatsAppBot, lógica conversacional) | `domain/`, `infrastructure/` | `api/` |
+| `api/` (routes, controllers, middleware) | `bot/`, `domain/`, `types/` | `infrastructure/` directly (must go through Application) |
+| `bot/` (WhatsAppBot, conversation logic) | `domain/`, `infrastructure/` | `api/` |
 | `domain/` (Order, Product) | `types/` | `bot/`, `api/`, `infrastructure/` |
 | `infrastructure/` (repos, adapters, DB) | `domain/`, `types/` | `api/`, `bot/` |
 
-### Estado de violaciones
+### Violation status
 
-1. ✅ **`api/routes/orders.ts`** — Ya no importa `OrderRepository` directamente.
-   - Se creó `src/application/OrderService.ts` que media entre la route y el repositorio.
-   - La route ahora importa `orderService` desde `application/`.
-2. ✅ **`api/routes/webhook.ts`** — Ya no importa `getAdapter()` desde Infrastructure.
-   - Se creó `src/application/WebhookService.ts` que encapsula el adapter y el bot.
-   - La route ahora importa `webhookService` desde `application/`.
-3. ✅ **`bot/WhatsAppBot.ts`** — Ya no importa repositorios directamente desde Infrastructure.
-   - Se crearon `OrderRepositoryPort` y `ProductRepositoryPort` en `src/application/ports/`.
-   - `OrderRepository` e `ProductRepository` implementan sus respectivos ports.
-   - `WhatsAppBot` recibe ambos repositorios **inyectados por constructor**.
-   - El wiring concreto se hace en `src/composition.ts` (composition root).
+1. ✅ **`api/routes/orders.ts`** — No longer imports `OrderRepository` directly.
+   - `src/application/OrderService.ts` was created to mediate between the route and the repository.
+   - The route now imports `orderService` from `application/`.
+2. ✅ **`api/routes/webhook.ts`** — No longer imports `getAdapter()` from Infrastructure.
+   - `src/application/WebhookService.ts` was created to encapsulate the adapter and the bot.
+   - The route now imports `webhookService` from `application/`.
+3. ✅ **`bot/WhatsAppBot.ts`** — No longer imports repositories directly from Infrastructure.
+   - `OrderRepositoryPort` and `ProductRepositoryPort` were created in `src/application/ports/`.
+   - `OrderRepository` and `ProductRepository` implement their respective ports.
+   - `WhatsAppBot` receives both repositories **injected via constructor**.
+   - Concrete wiring is done in `src/composition.ts` (composition root).
 
-### Objetivo a largo plazo
+### Long-term goal
 
-Agregar una capa `src/application/` (Services) que medie entre `api/` e `infrastructure/`. Las routes solo hablan con Services. Los Services hablan con Repos + Domain.
+Add a `src/application/` layer (Services) that mediates between `api/` and `infrastructure/`. Routes only talk to Services. Services talk to Repos + Domain.
 
 ```
 api/routes/orders.ts ──→ application/OrderService.ts ──→ infrastructure/OrderRepository.ts
 ```
 
-## Base de Datos (PostgreSQL)
+## Database (PostgreSQL)
 
-### Tabla `users` (nueva — v1.4)
+### Table `users` (new — v1.4)
 
-Unifica autenticación de **administradores y repartidores** en una sola tabla. No hay tabla `drivers` separada — el campo `role` diferencia los tipos de usuario.
+Unifies authentication for **admins and delivery drivers** in a single table. There is no separate `drivers` table — the `role` field differentiates user types.
 
-| Columna | Tipo | Notas |
+| Column | Type | Notes |
 |---------|------|-------|
 | id | SERIAL PK | autoincrement |
-| name | VARCHAR(100) | Nombre completo |
-| username | VARCHAR(50) UNIQUE | Para login |
-| password_hash | VARCHAR(255) | bcrypt — nunca texto plano |
+| name | VARCHAR(100) | Full name |
+| username | VARCHAR(50) UNIQUE | For login |
+| password_hash | VARCHAR(255) | bcrypt — never plaintext |
 | role | VARCHAR(20) | `admin` \| `delivery` |
-| active | BOOLEAN | DEFAULT true — inactivo no puede hacer login |
+| active | BOOLEAN | DEFAULT true — inactive users cannot login |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() |
 
-Ejemplos de registros:
+Example records:
 
-| username | role | Descripción |
+| username | role | Description |
 |----------|------|-------------|
-| `admin` | `admin` | Administrador del restaurante |
-| `juan.perez` | `delivery` | Repartidor 1 |
-| `andres.lopez` | `delivery` | Repartidor 2 |
+| `admin` | `admin` | Restaurant administrator |
+| `juan.perez` | `delivery` | Delivery driver 1 |
+| `andres.lopez` | `delivery` | Delivery driver 2 |
 
-### Tabla `orders`
-| Columna | Tipo | Notas |
+### Table `orders`
+| Column | Type | Notes |
 |---------|------|-------|
-| id | VARCHAR(50) PK | UUID generado por Order.ts |
-| customer_name | VARCHAR(100) | Nombre del cliente |
-| customer_phone | VARCHAR(20) | Telefono (limpio) |
+| id | VARCHAR(50) PK | UUID generated by Order.ts |
+| customer_name | VARCHAR(100) | Customer name |
+| customer_phone | VARCHAR(20) | Phone (clean) |
 | type | VARCHAR(10) | delivery \| pickup |
 | address | TEXT | nullable |
 | payment_method | VARCHAR(10) | cash \| nequi |
 | status | VARCHAR(20) | pending → confirmed → preparing → ready → delivered |
 | notes | TEXT | nullable |
-| delivery_proof_url | TEXT | nullable — foto evidencia de entrega (nuevo v1.4) |
-| delivered_by | INTEGER FK | nullable — `users(id)` del repartidor que entrego el pedido (nuevo v1.4) |
-| subtotal | INTEGER | en pesos |
-| delivery_fee | INTEGER | 3000 o 0 |
+| delivery_proof_url | TEXT | nullable — delivery proof photo (new v1.4) |
+| delivered_by | INTEGER FK | nullable — `users(id)` of driver who delivered the order (new v1.4) |
+| subtotal | INTEGER | in pesos |
+| delivery_fee | INTEGER | 3000 or 0 |
 | total | INTEGER | subtotal + fee |
 | created_at | TIMESTAMPTZ | NOW() |
 | estimated_ready_at | TIMESTAMPTZ | nullable |
 
-### Tabla `order_items`
-| Columna | Tipo | Notas |
+### Table `order_items`
+| Column | Type | Notes |
 |---------|------|-------|
 | id | SERIAL PK | autoincrement |
 | order_id | VARCHAR(50) FK | CASCADE DELETE |
-| product_id | VARCHAR(50) | referencia al catalogo |
+| product_id | VARCHAR(50) | catalog reference |
 | quantity | INTEGER | > 0 |
-| customizations | TEXT[] | array de strings |
+| customizations | TEXT[] | array of strings |
 | notes | TEXT | nullable |
-| unit_price | INTEGER | precio unitario |
+| unit_price | INTEGER | unit price |

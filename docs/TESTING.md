@@ -6,99 +6,99 @@
 - **HTTP testing**: [Supertest](https://github.com/ladjs/supertest)
 - **Coverage**: `@vitest/coverage-v8`
 
-## Comandos
+## Commands
 
 ```bash
-npm test                # corre todos los tests una vez
-npm run test:watch      # modo watch (re-corre al guardar)
-npm run test:coverage   # genera reporte de cobertura en /coverage
+npm test                # run all tests once
+npm run test:watch      # watch mode (re-runs on save)
+npm run test:coverage   # generates coverage report in /coverage
 ```
 
-## Estructura
+## Structure
 
 ```
 tests/
   unit/
     Order.test.ts          # domain model: Order, OrderItem, Customer
-    Product.test.ts        # catálogo: getProductById, getProductByName, etc.
-    WhatsAppBot.test.ts    # flujos conversacionales del bot (repo mockeado)
+    Product.test.ts        # catalog: getProductById, getProductByName, etc.
+    WhatsAppBot.test.ts    # bot conversation flows (mocked repo)
   integration/
-    routes.test.ts         # rutas Express via supertest (repo mockeado)
+    routes.test.ts         # Express routes via supertest (mocked repo)
 ```
 
-## Arquitectura de tests
+## Test Architecture
 
-### Tests unitarios del bot
+### Bot unit tests
 
-`WhatsAppBot` recibe el repositorio por constructor (inyección de dependencias):
+`WhatsAppBot` receives the repository via constructor (dependency injection):
 
 ```ts
-const repo = makeRepo(); // mock sin DB
+const repo = makeRepo(); // mock without DB
 const bot = new WhatsAppBot(repo);
 ```
 
-La función `makeRepo()` en `WhatsAppBot.test.ts` crea un objeto con todos los métodos de `OrderRepository` mockeados con `vi.fn()`. Esto permite testear todos los flujos conversacionales sin necesidad de PostgreSQL.
+The `makeRepo()` function in `WhatsAppBot.test.ts` creates an object with all `OrderRepository` methods mocked with `vi.fn()`. This allows testing all conversation flows without needing PostgreSQL.
 
-### Tests de integración
+### Integration tests
 
-Las rutas Express se testean con `supertest` usando la factory `createApp()` de `src/app.ts` (separada del `startServer()` de `src/index.ts`). El repositorio se mockea a nivel de módulo con `vi.mock(...)`.
+Express routes are tested with `supertest` using the `createApp()` factory from `src/app.ts` (separated from `startServer()` in `src/index.ts`). The repository is mocked at the module level with `vi.mock(...)`.
 
 ```ts
 import { createApp } from '../../src/app.js';
-const app = createApp(); // sin DB, sin puerto
+const app = createApp(); // no DB, no port
 ```
 
-### Lo que NO cubren estos tests (requeriría E2E con DB real)
+### What these tests DON'T cover (would require E2E with real DB)
 
-- `OrderRepository` contra PostgreSQL
-- `PATCH /api/v1/orders/:id` con orden existente
+- `OrderRepository` against PostgreSQL
+- `PATCH /api/v1/orders/:id` with existing order
 - `GET /api/v1/orders/stats/dashboard`
-- Persistencia real entre requests
+- Real persistence between requests
 
 ---
 
-## Protocolo TDD para bugs
+## TDD Protocol for Bugs
 
-Cuando aparece un bug en producción, el flujo obligatorio es:
+When a bug appears in production, the mandatory flow is:
 
-### 🔴 RED — test primero
+### 🔴 RED — test first
 
-Escribir un test que **reproduzca el bug exacto** antes de modificar cualquier código. El test debe fallar.
+Write a test that **reproduces the exact bug** before modifying any code. The test must fail.
 
 ```ts
 it('does not crash when ordering a product without customization options (regression)', async () => {
-  // setup que reproduce el escenario del bug
-  await bot.handleMessage(PHONE, msg('7')); // Coca-Cola — sin customizaciones
+  // setup that reproduces the bug scenario
+  await bot.handleMessage(PHONE, msg('7')); // Coca-Cola — no customizations
   const res = await bot.handleMessage(PHONE, msg('1'));
-  expect(res).toContain('Agregado'); // falla porque el bug existe
+  expect(res).toContain('Added'); // fails because the bug exists
 });
 ```
 
-### 🟢 GREEN — mínimo fix
+### 🟢 GREEN — minimal fix
 
-Implementar el cambio mínimo para que el test pase. Sin over-engineering.
+Implement the minimum change for the test to pass. No over-engineering.
 
 ### 🔵 REFACTOR
 
-Si el fix ensució algo, limpiar sin romper tests.
+If the fix made things messy, clean up without breaking tests.
 
-### Regla
+### Rule
 
-> **Nunca mergear un fix de bug sin su test de regresión.**
+> **Never merge a bug fix without its regression test.**
 
 ---
 
-## Ejemplo real: bug `pendingItem null` (15 Jun 2026)
+## Real example: `pendingItem null` bug (15 Jun 2026)
 
-**Error en producción:**
+**Production error:**
 ```
 TypeError: Cannot set properties of null (setting 'quantity')
     at WhatsAppBot.handleQuantity
 ```
 
-**Causa:** `handleProductSelection` saltaba a `step = 'quantity'` para productos sin customizaciones (bebidas) sin inicializar `session.pendingItem`.
+**Cause:** `handleProductSelection` jumped to `step = 'quantity'` for products without customizations (drinks) without initializing `session.pendingItem`.
 
-**Test de regresión** (`tests/unit/WhatsAppBot.test.ts`):
+**Regression test** (`tests/unit/WhatsAppBot.test.ts`):
 ```ts
 it('does not crash when ordering a product without customization options (regression)', async () => {
   await bot.handleMessage(PHONE, msg('hola'));
@@ -106,7 +106,7 @@ it('does not crash when ordering a product without customization options (regres
   await bot.handleMessage(PHONE, msg('Carlos'));
   await bot.handleMessage(PHONE, msg('7')); // Coca-Cola 400ml
   const res = await bot.handleMessage(PHONE, msg('1'));
-  expect(res).toContain('Agregado');
+  expect(res).toContain('Added');
   expect(res).toContain('Coca-Cola');
 });
 ```
@@ -114,7 +114,7 @@ it('does not crash when ordering a product without customization options (regres
 **Fix** (`src/bot/WhatsAppBot.ts`, `handleProductSelection`):
 ```ts
 } else {
-  session.pendingItem = {   // ← esto faltaba
+  session.pendingItem = {   // ← this was missing
     productId: product.id,
     quantity: 0,
     customizations: [],
