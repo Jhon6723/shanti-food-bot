@@ -260,6 +260,88 @@ describe('WhatsAppBot — order flow (happy path)', () => {
     expect(repo.save).toHaveBeenCalledOnce();
   });
 
+  it('shows customer name in order summary (#16)', async () => {
+    await startOrder();
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('4'));
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('2'));
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30, Barrio Centro'));
+    await bot.handleMessage(PHONE, msg('no')); // skip notas
+    const res = await bot.handleMessage(PHONE, msg('1')); // Efectivo → summary
+    expect(res).toContain('Carlos');
+  });
+
+  it('does not show hardcoded "25-30 minutos" in order summary (#15)', async () => {
+    await startOrder();
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('4'));
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('2'));
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30, Barrio Centro'));
+    await bot.handleMessage(PHONE, msg('no')); // skip notas
+    const res = await bot.handleMessage(PHONE, msg('1')); // Efectivo → summary
+    expect(res).not.toContain('25-30 minutos');
+  });
+
+  it('shows dynamic time based on product preparationMinutes in summary (#15)', async () => {
+    await startOrder();
+    await bot.handleMessage(PHONE, msg('1')); // Arroz Chino de Pollo (20 min prep)
+    await bot.handleMessage(PHONE, msg('4')); // Ninguna
+    await bot.handleMessage(PHONE, msg('1')); // 1 porción
+    await bot.handleMessage(PHONE, msg('2')); // finalizar
+    await bot.handleMessage(PHONE, msg('1')); // Domicilio
+    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30, Barrio Centro'));
+    await bot.handleMessage(PHONE, msg('no')); // skip notas
+    const res = await bot.handleMessage(PHONE, msg('1')); // Efectivo → summary
+    expect(res).toMatch(/~\d+\s*minutos/);
+    expect(res).not.toMatch(/25-30/);
+  });
+
+  it('shows customer name in confirmation message (#16)', async () => {
+    await startOrder();
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('4'));
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('2'));
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30, Barrio Centro'));
+    await bot.handleMessage(PHONE, msg('no')); // skip notas
+    await bot.handleMessage(PHONE, msg('1')); // Efectivo
+    const res = await bot.handleMessage(PHONE, msg('1')); // Confirmar
+    expect(res).toContain('Carlos');
+  });
+
+  it('does not show hardcoded "25-30 minutos" in confirmation message (#15)', async () => {
+    await startOrder();
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('4'));
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('2'));
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30, Barrio Centro'));
+    await bot.handleMessage(PHONE, msg('no')); // skip notas
+    await bot.handleMessage(PHONE, msg('1')); // Efectivo
+    const res = await bot.handleMessage(PHONE, msg('1')); // Confirmar
+    expect(res).not.toContain('25-30 minutos');
+  });
+
+  it('shows dynamic time in confirmation message (#15)', async () => {
+    await startOrder();
+    await bot.handleMessage(PHONE, msg('1')); // Arroz Chino de Pollo (20 min)
+    await bot.handleMessage(PHONE, msg('4'));
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('2'));
+    await bot.handleMessage(PHONE, msg('1'));
+    await bot.handleMessage(PHONE, msg('Carrera 10 #20-30, Barrio Centro'));
+    await bot.handleMessage(PHONE, msg('no'));
+    await bot.handleMessage(PHONE, msg('1')); // Efectivo
+    const res = await bot.handleMessage(PHONE, msg('1')); // Confirmar
+    expect(res).toMatch(/~\d+\s*minutos/);
+  });
+
   it('includes Nequi payment instructions when paying by Nequi', async () => {
     await startOrder();
     await bot.handleMessage(PHONE, msg('1'));

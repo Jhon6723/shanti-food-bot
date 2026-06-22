@@ -100,7 +100,8 @@ export class WhatsAppBot {
     if (chatId) {
       session.chatId = chatId;
     }
-    const text = message.text?.body.toLowerCase().trim() ?? '';
+    const rawText = message.text?.body.trim() ?? '';
+    const text = rawText.toLowerCase();
 
     if (text === 'hola' || text === 'inicio' || text === 'empezar') {
       session.reset();
@@ -131,7 +132,7 @@ export class WhatsAppBot {
       case 'menu':
         return this.handleProductSelection(text, session);
       case 'name':
-        return this.handleName(text, session);
+        return this.handleName(rawText, session);
       case 'product':
         return this.handleProductSelection(text, session);
       case 'customization':
@@ -529,6 +530,7 @@ Responde con el número de la opción.`;
 
   private async showOrderSummary(session: Session): Promise<string> {
     let summary = `*📋 RESUMEN DE TU PEDIDO 📋*\n\n`;
+    summary += `👤 Cliente: *${session.customerName}*\n\n`;
     for (const [i, item] of session.items.entries()) {
       const product = await this.productRepo.findById(item.productId);
       if (!product) continue;
@@ -545,7 +547,8 @@ Responde con el número de la opción.`;
     if (session.type === 'delivery') summary += `📍 Entrega: ${session.address}\n`;
     else summary += `🏪 Recoger en: ${this.restaurantAddress}\n`;
     summary += `💳 Pago: ${session.paymentMethod === 'cash' ? 'Efectivo' : 'Nequi'}\n\n`;
-    summary += `⏱️ Tiempo estimado: 25-30 minutos\n\n¿Confirmas el pedido?\n1️⃣ ✅ Sí, confirmar\n2️⃣ ❌ Cancelar\n3️⃣ ✏️ Modificar`;
+    const maxPrepTime = Math.max(...session.items.map((i) => i.preparationMinutes ?? 25));
+    summary += `⏱️ Tiempo estimado: ~${maxPrepTime} minutos\n\n¿Confirmas el pedido?\n1️⃣ ✅ Sí, confirmar\n2️⃣ ❌ Cancelar\n3️⃣ ✏️ Modificar`;
     return summary;
   }
 
@@ -604,7 +607,10 @@ Responde con el número de la opción.`;
       session.reset();
 
       let msg = `✅ *¡PEDIDO CONFIRMADO!* ✅\n\nNúmero de orden: *#${order.id}*\n\n`;
-      msg += `⏱️ Tiempo estimado: 25-30 minutos\n📞 Te contactaremos al ${phone}\n\n`;
+      msg += `👤 Cliente: *${order.customer.name}*\n`;
+      const remainingMs = new Date(order.estimatedReadyAt).getTime() - Date.now();
+      const remainingMin = Math.max(1, Math.ceil(remainingMs / 60000));
+      msg += `⏱️ Tiempo estimado: ~${remainingMin} minutos\n📞 Te contactaremos al ${phone}\n\n`;
       if (order.paymentMethod === 'nequi') {
         msg += `💳 *Pago por Nequi:*\nNúmero: 312XXXXXXX\nTotal a transferir: $${order.total.toLocaleString()}\n\nPor favor envía el comprobante por aquí.\n\n`;
       }

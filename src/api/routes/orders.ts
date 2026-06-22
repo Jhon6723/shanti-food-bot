@@ -23,7 +23,11 @@ const router = Router();
 const statusNotificationMessages: Record<OrderStatus, ((order: Order) => string) | null> = {
   pending: null,
   confirmed: (order) => `✅ *¡Tu pedido ha sido confirmado!*\n\nPedido: *#${order.id}*\n\nTu orden está en preparación. Te notificaremos cuando esté lista. 🍳`,
-  preparing: (order) => `🍳 *Tu pedido está en preparación*\n\nPedido: *#${order.id}*\n\nTiempo estimado de preparación: ~25 minutos.\n\nTe avisaremos cuando esté listo. 🎉`,
+  preparing: (order) => {
+    const remainingMs = new Date(order.estimatedReadyAt).getTime() - Date.now();
+    const remainingMin = Math.max(1, Math.ceil(remainingMs / 60000));
+    return `🍳 *Tu pedido está en preparación*\n\nPedido: *#${order.id}*\n\nTiempo estimado de preparación: ~${remainingMin} minutos.\n\nTe avisaremos cuando esté listo. 🎉`;
+  },
   ready: (order) => {
     if (order.type === 'delivery') {
       return `🎉 *¡Tu pedido está listo!*\n\nPedido: *#${order.id}*\n\nUn repartidor está en camino a tu dirección. 🛵\n\nGracias por preferir Arrocería Shanti 🍚`;
