@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Shanti Food API
-  version: 1.3.0
+  version: 1.5.0
   description: API para gestión de pedidos de arrocería vía WhatsApp
 
 servers:
@@ -186,7 +186,7 @@ paths:
           description: Producto no disponible
 
     get:
-      summary: Listar pedidos
+      summary: Listar pedidos (admin ve todos; repartidor ve solo los asignados a él con status=ready)
       security:
         - BearerAuth: []
       parameters:
@@ -209,6 +209,43 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Order'
+
+  /orders/{orderId}/assign:
+    patch:
+      summary: Asignar repartidor a un pedido (solo admin)
+      tags: [Orders]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [driverId]
+              properties:
+                driverId:
+                  type: integer
+                  description: ID del usuario (repartidor) al que se le asigna el pedido
+      responses:
+        '200':
+          description: Pedido actualizado con el repartidor asignado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: driverId faltante o pedido ya entregado/cancelado
+        '403':
+          description: No autorizado (se requiere rol admin)
+        '404':
+          description: Pedido no encontrado
 
   /orders/{orderId}/delivery-proof:
     post:
@@ -384,6 +421,9 @@ components:
         deliveredBy:
           type: integer
           description: ID del usuario (repartidor) que entregó el pedido
+        assignedDriver:
+          type: integer
+          description: ID del usuario (repartidor) asignado al pedido (P7)
         createdAt:
           type: string
           format: date-time

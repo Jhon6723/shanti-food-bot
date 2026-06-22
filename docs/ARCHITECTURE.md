@@ -233,6 +233,7 @@ Example records:
 | notes | TEXT | nullable |
 | delivery_proof_url | TEXT | nullable — delivery proof photo (new v1.4) |
 | delivered_by | INTEGER FK | nullable — `users(id)` of driver who delivered the order (new v1.4) |
+| assigned_driver | INTEGER FK | nullable — `users(id)` of driver assigned to deliver the order (new v1.5) |
 | subtotal | INTEGER | in pesos |
 | delivery_fee | INTEGER | 3000 or 0 |
 | total | INTEGER | subtotal + fee |

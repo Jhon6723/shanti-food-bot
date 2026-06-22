@@ -510,10 +510,11 @@ En Android (Chrome):
 |--------|-----|----------|------|
 | Login | ambos | `POST /api/v1/auth/login` | ❌ |
 | Ver todos los pedidos | admin | `GET /api/v1/orders?status=...` | ✅ JWT |
-| Ver pedidos `ready` (domicilio) | delivery | `GET /api/v1/orders?status=ready&type=delivery` | ✅ JWT |
+| Ver pedidos `ready` (domicilio) | delivery | `GET /api/v1/orders` — solo los asignados a él (`assignedDriver = userId`) | ✅ JWT |
 | Ver detalle | ambos | `GET /api/v1/orders/:id` | ✅ JWT |
 | Cambiar estado | admin | `PATCH /api/v1/orders/:id` | ✅ JWT |
 | Marcar entregado | delivery | `PATCH /api/v1/orders/:id { status: delivered }` | ✅ JWT |
+| Asignar repartidor | admin | `PATCH /api/v1/orders/:id/assign { driverId }` | ✅ JWT |
 | Subir foto evidencia | delivery | `POST /api/v1/orders/:id/delivery-proof` | ✅ JWT |
 | Estadísticas generales | admin | `GET /api/v1/orders/stats/dashboard` | ✅ JWT |
 | Stats por repartidor | admin | `GET /api/v1/users/:id/stats` | ✅ JWT |
@@ -659,6 +660,7 @@ VALUES
 |---------|------|-------|
 | delivery_proof_url | TEXT | nullable — URL de foto de evidencia de entrega |
 | delivered_by | INTEGER FK | nullable — referencia a `users(id)`, registra qué repartidor entrego el pedido |
+| assigned_driver | INTEGER FK | nullable — referencia a `users(id)`, repartidor asignado al pedido (P7) |
 
 Esta FK permite consultas de stats por repartidor:
 ```sql
@@ -958,7 +960,7 @@ El prototipo generado en Figma Make es la **base visual y estructural** del fron
 | `components/types.tsx` | `lib/types.ts` | Alinear tipos con esquema DB real (`id: number` no `string`, añadir `deliveredBy`, `deliveryProofUrl`) |
 | `components/LoginScreen.tsx` | `pages/LoginPage.tsx` | Conectar a `POST /api/v1/auth/login`, guardar token en `localStorage`, añadir guard `import.meta.env.DEV` para credenciales demo |
 | `components/OrdersListScreen.tsx` | `pages/OrdersPage.tsx` | Usar `useQuery` con `refetchInterval: 5000`, añadir lógica de sonido al detectar pedido nuevo |
-| `components/OrderDetailModal.tsx` | `components/OrderDetailModal.tsx` | Conectar botones a `PATCH /api/v1/orders/:id` |
+| `components/OrderDetailModal.tsx` | `components/OrderDetailModal.tsx` | Conectar botones a `PATCH /api/v1/orders/:id`, añadir UI de asignación de repartidor (`PATCH /api/v1/orders/:id/assign`) |
 | `components/StatsScreen.tsx` | `pages/StatsPage.tsx` | Conectar a `GET /api/v1/orders/stats/dashboard` con `refetchInterval: 60000` |
 | `components/DriversScreen.tsx` | `pages/DriversPage.tsx` | Conectar a `GET/POST /api/v1/users?role=delivery` |
 | `components/DriverFormModal.tsx` | `components/DriverFormModal.tsx` | Conectar a `POST /api/v1/users` y `PATCH /api/v1/users/:id` |

@@ -1,6 +1,6 @@
 # Known Issues and Roadmap
 
-## Status: v1.4 — Dynamic delivery time + customer name fix
+## Status: v1.5 — Manual driver assignment
 
 ---
 
@@ -39,6 +39,12 @@
 |---|---------|-----|
 | 15 | Hardcoded "25-30 minutos" delivery time in bot and API notifications | Use `estimatedReadyAt` (dynamic, based on product `preparationMinutes`) in `showOrderSummary`, `handleConfirmation`, and `preparing` notification |
 | 16 | Customer name not shown in order summary/confirmation; name stored in lowercase | Preserve original case in `handleName` (pass `rawText` instead of lowercased `text`); display `👤 Cliente: *{name}*` in summary and confirmation messages |
+
+## ✅ Fixed in v1.5
+
+| # | Problem | Fix |
+|---|---------|-----|
+| P7 | No manual driver assignment — all delivery drivers see all ready orders | Add `assignedDriver` field to Order model + `assignDriver()` method. New `PATCH /orders/:id/assign` endpoint (admin only). Delivery API filters by `assignedDriver = userId`. Driver assignment UI in `OrderDetailModal`. DB migration adds `assigned_driver` column. |
 
 ---
 
@@ -211,6 +217,7 @@ Persist the original `chatId` from the webhook and use it for all WhatsApp commu
 **Solution**: JWT in admin dashboard phase + Meta webhook HMAC verification.
 
 ### P7. No manual driver assignment
+**Status**: ✅ Fixed in v1.5
 **Problem**: All delivery drivers see all ready orders. No way to assign a specific order to a specific driver.
 **Impact**: With multiple drivers, orders can be delivered by anyone — no accountability or route optimization.
 **Solution**: Add `assignedDriver` field to Order. Admin assigns orders to drivers via dashboard. Delivery API filters by `assignedDriver = userId`.
@@ -230,5 +237,6 @@ Persist the original `chatId` from the webhook and use it for all WhatsApp commu
 | v1.2 | Improved UX + validations | #9–13 ✅ |
 | v1.3 | Paginated status | #14 ✅ |
 | v1.4 | **Admin dashboard + UX fixes** | #15, #16 ✅ — dynamic delivery time, customer name fix |
+| v1.5 | **Driver management** | P7 ✅ — manual driver assignment |
 | v2.0 | Production | P2, P3, P4 — Meta templates, persistent sessions, business hours |
-| v2.1 | Driver management | P7, P8 — manual driver assignment, optional delivery dashboard |
+| v2.1 | Optional delivery dashboard | P8 — optional delivery dashboard for small businesses |
