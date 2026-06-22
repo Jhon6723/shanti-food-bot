@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS orders (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     estimated_ready_at TIMESTAMPTZ,
     delivery_proof_url TEXT,
-    delivered_by  INTEGER REFERENCES users(id) ON DELETE SET NULL
+    delivered_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    assigned_driver INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
@@ -100,6 +101,12 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_chat_id VARCHAR(50);
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_proof_url TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_orders_delivered_by ON orders(delivered_by);
+`;
+
+// Migration step 2b: add assigned_driver column to orders (P7 — manual driver assignment)
+const MIGRATION_ASSIGNED_DRIVER_SQL = `
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS assigned_driver INTEGER REFERENCES users(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_orders_assigned_driver ON orders(assigned_driver);
 `;
 
 // Migration step 3: categories and products tables (v1.5)
@@ -187,6 +194,7 @@ export async function initDatabase(): Promise<void> {
   await pool.query(SCHEMA_SQL);
   await pool.query(MIGRATION_USERS_SQL);
   await pool.query(MIGRATION_ORDERS_SQL);
+  await pool.query(MIGRATION_ASSIGNED_DRIVER_SQL);
   await pool.query(MIGRATION_CATEGORIES_SQL);
   await pool.query(MIGRATION_PRODUCTS_SQL);
   await seedAdminUser();

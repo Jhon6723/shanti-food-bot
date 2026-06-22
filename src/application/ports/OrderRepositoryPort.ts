@@ -10,6 +10,7 @@ export interface OrderFilters {
   status?: OrderStatus;
   type?: OrderType;
   customerPhone?: string;
+  assignedDriver?: number;
 }
 
 export interface SalesReportFilters {

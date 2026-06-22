@@ -29,6 +29,7 @@ interface OrderRow {
   created_at: string;
   estimated_ready_at: string | null;
   delivered_by: number | null;
+  assigned_driver: number | null;
 }
 
 interface OrderItemRow {
@@ -43,8 +44,8 @@ export class OrderRepository implements OrderRepositoryPort {
   async save(order: Order): Promise<Order> {
     // Insert order
     await query(
-      `INSERT INTO orders (id, customer_name, customer_phone, customer_chat_id, type, address, payment_method, status, notes, subtotal, delivery_fee, total, created_at, estimated_ready_at, delivered_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      `INSERT INTO orders (id, customer_name, customer_phone, customer_chat_id, type, address, payment_method, status, notes, subtotal, delivery_fee, total, created_at, estimated_ready_at, delivered_by, assigned_driver)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        ON CONFLICT (id) DO UPDATE SET
          status = EXCLUDED.status,
          notes = EXCLUDED.notes,
@@ -52,6 +53,7 @@ export class OrderRepository implements OrderRepositoryPort {
          delivery_fee = EXCLUDED.delivery_fee,
          total = EXCLUDED.total,
          delivered_by = EXCLUDED.delivered_by,
+         assigned_driver = EXCLUDED.assigned_driver,
          customer_chat_id = EXCLUDED.customer_chat_id`,
       [
         order.id,
@@ -69,6 +71,7 @@ export class OrderRepository implements OrderRepositoryPort {
         order.createdAt,
         order.estimatedReadyAt ?? null,
         order.deliveredBy ?? null,
+        order.assignedDriver ?? null,
       ]
     );
 
@@ -119,6 +122,11 @@ export class OrderRepository implements OrderRepositoryPort {
       conditions.push(`(customer_phone = $${paramIdx} OR customer_phone = $${paramIdx + 1} OR customer_phone = $${paramIdx + 2})`);
       params.push(normalized, `+57${normalized}`, `57${normalized}`);
       paramIdx += 3;
+    }
+
+    if (filters.assignedDriver !== undefined) {
+      conditions.push(`assigned_driver = $${paramIdx++}`);
+      params.push(filters.assignedDriver);
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -396,6 +404,9 @@ export class OrderRepository implements OrderRepositoryPort {
     });
     if (row.delivered_by) {
       order.deliveredBy = row.delivered_by;
+    }
+    if (row.assigned_driver) {
+      order.assignedDriver = row.assigned_driver;
     }
     return order;
   }
