@@ -112,14 +112,15 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// GET /orders — List orders (admin: all; delivery: only ready)
+// GET /orders — List orders (admin: all; delivery: only ready + assigned to them)
 router.get('/', requireJWT, async (req: Request, res: Response) => {
   try {
-    const filters: { status?: OrderStatus; type?: 'delivery' | 'pickup' } = {};
+    const filters: { status?: OrderStatus; type?: 'delivery' | 'pickup'; assignedDriver?: number } = {};
 
     if (req.user!.role === 'delivery') {
-      // delivery drivers only see ready orders
+      // delivery drivers only see ready orders assigned to them
       filters.status = 'ready';
+      filters.assignedDriver = req.user!.userId;
     } else {
       if (req.query.status) filters.status = req.query.status as OrderStatus;
       if (req.query.type) filters.type = req.query.type as 'delivery' | 'pickup';
@@ -206,6 +207,29 @@ router.patch('/:id', requireJWT, async (req: Request, res: Response) => {
     if (status) {
       await notifyCustomer(order, status);
     }
+
+    res.json(order.toJSON());
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+});
+
+// PATCH /orders/:id/assign — Assign a driver to an order (admin only)
+router.patch('/:id/assign', requireJWT, requireRole('admin'), async (req: Request, res: Response) => {
+  try {
+    const { driverId } = req.body as { driverId?: number };
+
+    if (!driverId || typeof driverId !== 'number') {
+      return res.status(400).json({ error: 'driverId is required and must be a number' });
+    }
+
+    const order = await orderService.getOrderById(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    order.assignDriver(driverId);
+    await orderService.updateOrder(order);
+
+    sseService.broadcast({ type: 'orderUpdated', data: order.toJSON() });
 
     res.json(order.toJSON());
   } catch (error) {

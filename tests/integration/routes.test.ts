@@ -505,6 +505,76 @@ describe('PATCH /api/v1/orders/:id — role enforcement', () => {
     expect(res.status).toBe(200);
     expect(vi.mocked(sendWhatsAppMessage)).toHaveBeenCalledWith('573001234567', expect.stringContaining('confirmado'), undefined);
   });
+
+  it('PATCH /orders/:id/assign — admin can assign a driver (P7)', async () => {
+    const mockAssignDriver = vi.fn();
+    mockRepo.findById.mockResolvedValueOnce({
+      status: 'ready',
+      assignedDriver: undefined,
+      assignDriver: mockAssignDriver,
+      confirm: vi.fn(), prepare: vi.fn(), markReady: vi.fn(),
+      deliver: vi.fn(), cancel: vi.fn(),
+      notes: '',
+      customer: { name: 'Juan', phone: '573001234567', toJSON: vi.fn().mockReturnValue({ name: 'Juan', phone: '573001234567' }) },
+      id: 'SH-TEST',
+      type: 'delivery',
+      toJSON: vi.fn().mockReturnValue({ id: 'SH-TEST', status: 'ready', assignedDriver: 3 }),
+    });
+    mockRepo.update.mockResolvedValueOnce(undefined);
+
+    const res = await request(app)
+      .patch('/api/v1/orders/SH-TEST/assign')
+      .set('Authorization', `Bearer ${makeToken('admin')}`)
+      .send({ driverId: 3 });
+
+    expect(res.status).toBe(200);
+    expect(mockAssignDriver).toHaveBeenCalledWith(3);
+    expect(mockRepo.update).toHaveBeenCalled();
+  });
+
+  it('PATCH /orders/:id/assign — delivery role cannot assign (P7)', async () => {
+    const res = await request(app)
+      .patch('/api/v1/orders/SH-TEST/assign')
+      .set('Authorization', `Bearer ${makeToken('delivery')}`)
+      .send({ driverId: 3 });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('PATCH /orders/:id/assign — returns 404 if order not found (P7)', async () => {
+    mockRepo.findById.mockResolvedValueOnce(undefined);
+
+    const res = await request(app)
+      .patch('/api/v1/orders/SH-NONEXIST/assign')
+      .set('Authorization', `Bearer ${makeToken('admin')}`)
+      .send({ driverId: 3 });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('PATCH /orders/:id/assign — returns 400 if driverId missing (P7)', async () => {
+    const res = await request(app)
+      .patch('/api/v1/orders/SH-TEST/assign')
+      .set('Authorization', `Bearer ${makeToken('admin')}`)
+      .send({});
+
+    expect(res.status).toBe(400);
+  });
+
+  it('GET /orders — delivery driver sees only assigned orders (P7)', async () => {
+    mockRepo.findAll.mockResolvedValueOnce([
+      { toJSON: vi.fn().mockReturnValue({ id: 'SH-001', status: 'ready', assignedDriver: 1 }) },
+    ]);
+
+    const res = await request(app)
+      .get('/api/v1/orders')
+      .set('Authorization', `Bearer ${makeToken('delivery')}`);
+
+    expect(res.status).toBe(200);
+    expect(mockRepo.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'ready', assignedDriver: 1 })
+    );
+  });
 });
 
 // ─── Health ──────────────────────────────────────────────────────────────────
