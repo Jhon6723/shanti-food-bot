@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { api } from '../lib/api';
-import type { Order, OrderStatus } from '../lib/types';
+import type { Order, OrderStatus, User } from '../lib/types';
 
 interface UpdateOrderPayload {
   status?: OrderStatus;
@@ -74,6 +74,25 @@ export function useUpdateOrder() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateOrderPayload }) =>
       api.patch(`/orders/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}
+
+export function useDeliveryDrivers() {
+  return useQuery<User[]>({
+    queryKey: ['drivers'],
+    queryFn: () => api.get<User[]>('/users?role=delivery'),
+  });
+}
+
+export function useAssignDriver() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ orderId, driverId }: { orderId: string; driverId: number }) =>
+      api.patch(`/orders/${orderId}/assign`, { driverId }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['orders'] });
     },

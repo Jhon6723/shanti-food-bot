@@ -1,5 +1,6 @@
-import { Clock, MapPin, MessageSquare, Phone, X } from 'lucide-react';
-import { useUpdateOrder } from '../hooks/useOrders';
+import { Clock, MapPin, MessageSquare, Phone, UserCircle, X } from 'lucide-react';
+import { useState } from 'react';
+import { useAssignDriver, useDeliveryDrivers, useUpdateOrder } from '../hooks/useOrders';
 import {
     Order,
     STATUS_COLORS,
@@ -17,8 +18,14 @@ interface Props {
 
 export function OrderDetailModal({ order, onClose, onToast }: Props) {
   const updateOrder = useUpdateOrder();
+  const assignDriver = useAssignDriver();
+  const { data: drivers = [] } = useDeliveryDrivers();
+  const [selectedDriver, setSelectedDriver] = useState<number | null>(
+    order.assignedDriver ?? null
+  );
   const nextAction = getNextAction(order.status);
   const canAct = !['delivered', 'cancelled'].includes(order.status);
+  const canAssign = order.type === 'delivery' && canAct;
 
   const handleConfirm = async () => {
     if (!nextAction) return;
@@ -155,6 +162,49 @@ export function OrderDetailModal({ order, onClose, onToast }: Props) {
             <Clock size={13} />
             <span>Creado a las {formatTime(order.createdAt)}</span>
           </div>
+
+          {canAssign && (
+            <>
+              <div className="h-px bg-slate-100" />
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-slate-400 text-xs uppercase tracking-wide">
+                  <UserCircle size={14} />
+                  <span>Asignar repartidor</span>
+                </div>
+                <select
+                  value={selectedDriver ?? ''}
+                  onChange={(e) => setSelectedDriver(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full py-2.5 px-3 rounded-xl border-2 border-slate-200 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none transition-colors"
+                >
+                  <option value="">Sin asignar</option>
+                  {drivers.filter((d) => d.active).map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+                {selectedDriver !== null && selectedDriver !== (order.assignedDriver ?? null) && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        await assignDriver.mutateAsync({ orderId: order.id, driverId: selectedDriver });
+                        onToast('Repartidor asignado', 'success');
+                      } catch {
+                        onToast('No se pudo asignar el repartidor.', 'error');
+                      }
+                    }}
+                    disabled={assignDriver.isPending}
+                    className="w-full py-3 bg-blue-600 text-white rounded-xl text-sm hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50"
+                  >
+                    {assignDriver.isPending ? 'Asignando...' : 'Confirmar asignación'}
+                  </button>
+                )}
+                {order.assignedDriver && selectedDriver === (order.assignedDriver ?? null) && (
+                  <p className="text-slate-400 text-xs">
+                    Repartidor actual: <span className="text-slate-600 font-medium">{drivers.find((d) => d.id === order.assignedDriver)?.name ?? `#${order.assignedDriver}`}</span>
+                  </p>
+                )}
+              </div>
+            </>
+          )}
 
           {canAct && (
             <div className="flex gap-3 pt-2">

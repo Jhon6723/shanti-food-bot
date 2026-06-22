@@ -48,6 +48,7 @@ export interface Order {
   status: OrderStatus;
   createdAt: string;
   estimatedReadyAt: string;
+  assignedDriver?: number;
 }
 
 export interface User {
