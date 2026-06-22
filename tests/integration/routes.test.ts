@@ -503,7 +503,7 @@ describe('PATCH /api/v1/orders/:id — role enforcement', () => {
       .set('Authorization', `Bearer ${makeToken('admin')}`)
       .send({ status: 'confirmed' });
     expect(res.status).toBe(200);
-    expect(vi.mocked(sendWhatsAppMessage)).toHaveBeenCalledWith('573001234567', expect.stringContaining('confirmado'));
+    expect(vi.mocked(sendWhatsAppMessage)).toHaveBeenCalledWith('573001234567', expect.stringContaining('confirmado'), undefined);
   });
 });
 

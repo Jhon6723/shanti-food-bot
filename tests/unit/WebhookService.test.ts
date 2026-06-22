@@ -73,7 +73,11 @@ describe('WebhookService', () => {
     await service.process(makeReq({}));
 
     expect(adapter.parseIncoming).toHaveBeenCalled();
-    expect(bot.handleMessage).toHaveBeenCalledWith('3001234567', { type: 'text', text: { body: 'hola' } });
+    expect(bot.handleMessage).toHaveBeenCalledWith(
+      '3001234567',
+      { type: 'text', text: { body: 'hola' }, interactive: undefined },
+      '3001234567@c.us'
+    );
     expect(adapter.sendMessage).toHaveBeenCalledWith('3001234567', 'Welcome!', { chatId: '3001234567@c.us' });
   });
 });
