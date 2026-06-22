@@ -1,6 +1,6 @@
 # Known Issues and Roadmap
 
-## Status: v1.3 — Paginated orders + documented security
+## Status: v1.4 — Dynamic delivery time + customer name fix
 
 ---
 
@@ -32,6 +32,13 @@
 | # | Problem | Fix |
 |---|---------|-----|
 | 14 | Order status showed only one order | `findAllPendingByCustomer` + detail view + compact paginated list |
+
+## ✅ Fixed in v1.4
+
+| # | Problem | Fix |
+|---|---------|-----|
+| 15 | Hardcoded "25-30 minutos" delivery time in bot and API notifications | Use `estimatedReadyAt` (dynamic, based on product `preparationMinutes`) in `showOrderSummary`, `handleConfirmation`, and `preparing` notification |
+| 16 | Customer name not shown in order summary/confirmation; name stored in lowercase | Preserve original case in `handleName` (pass `rawText` instead of lowercased `text`); display `👤 Cliente: *{name}*` in summary and confirmation messages |
 
 ---
 
@@ -203,6 +210,16 @@ Persist the original `chatId` from the webhook and use it for all WhatsApp commu
 **Problem**: See `docs/SECURITY.md` — issues #1, #2, #3.
 **Solution**: JWT in admin dashboard phase + Meta webhook HMAC verification.
 
+### P7. No manual driver assignment
+**Problem**: All delivery drivers see all ready orders. No way to assign a specific order to a specific driver.
+**Impact**: With multiple drivers, orders can be delivered by anyone — no accountability or route optimization.
+**Solution**: Add `assignedDriver` field to Order. Admin assigns orders to drivers via dashboard. Delivery API filters by `assignedDriver = userId`.
+
+### P8. Delivery dashboard not optional for small businesses
+**Problem**: The delivery dashboard is always enabled. For small businesses with one driver or direct contact, it adds unnecessary complexity.
+**Impact**: Small business owners must manage delivery through the dashboard even when a simple WhatsApp contact would suffice.
+**Solution**: Add `DELIVERY_DASHBOARD_ENABLED` env var. When disabled, admin manages delivery directly and contacts driver via WhatsApp.
+
 ---
 
 ## Roadmap
@@ -212,5 +229,6 @@ Persist the original `chatId` from the webhook and use it for all WhatsApp commu
 | v1.1 | Robust flow | #1–8 ✅ |
 | v1.2 | Improved UX + validations | #9–13 ✅ |
 | v1.3 | Paginated status | #14 ✅ |
-| v1.4 | **Admin dashboard (in progress)** | P5, P6 — JWT + order CRUD + statistics |
+| v1.4 | **Admin dashboard + UX fixes** | #15, #16 ✅ — dynamic delivery time, customer name fix |
 | v2.0 | Production | P2, P3, P4 — Meta templates, persistent sessions, business hours |
+| v2.1 | Driver management | P7, P8 — manual driver assignment, optional delivery dashboard |
