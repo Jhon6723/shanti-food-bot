@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { Order, OrderItem, Customer } from '../../src/domain/models/Order.js';
+import { describe, expect, it } from 'vitest';
+import { Customer, Order, OrderItem } from '../../src/domain/models/Order.js';
 
 const baseOrderData = {
   customer: { name: 'Ana', phone: '3001234567' },
@@ -154,5 +154,58 @@ describe('Order', () => {
     });
     expect(order.subtotal).toBe(36000 + 12000);
     expect(order.total).toBe(48000 + 3000);
+  });
+
+  describe('assignedDriver (P7)', () => {
+    it('starts without an assigned driver', () => {
+      const order = new Order(baseOrderData);
+      expect(order.assignedDriver).toBeUndefined();
+    });
+
+    it('assignDriver sets the driver id', () => {
+      const order = new Order(baseOrderData);
+      order.assignDriver(5);
+      expect(order.assignedDriver).toBe(5);
+    });
+
+    it('assignDriver can be called multiple times to reassign', () => {
+      const order = new Order(baseOrderData);
+      order.assignDriver(5);
+      order.assignDriver(3);
+      expect(order.assignedDriver).toBe(3);
+    });
+
+    it('assignDriver throws if order is already delivered', () => {
+      const order = new Order(baseOrderData);
+      order.confirm();
+      order.prepare();
+      order.markReady();
+      order.deliver(1);
+      expect(() => order.assignDriver(2)).toThrow('Cannot assign driver to a delivered or cancelled order');
+    });
+
+    it('assignDriver throws if order is cancelled', () => {
+      const order = new Order(baseOrderData);
+      order.cancel();
+      expect(() => order.assignDriver(2)).toThrow('Cannot assign driver to a delivered or cancelled order');
+    });
+
+    it('toJSON includes assignedDriver', () => {
+      const order = new Order(baseOrderData);
+      order.assignDriver(5);
+      const json = order.toJSON();
+      expect(json.assignedDriver).toBe(5);
+    });
+
+    it('toJSON includes assignedDriver as undefined when not set', () => {
+      const order = new Order(baseOrderData);
+      const json = order.toJSON();
+      expect(json.assignedDriver).toBeUndefined();
+    });
+
+    it('accepts assignedDriver in constructor data', () => {
+      const order = new Order({ ...baseOrderData, assignedDriver: 7 });
+      expect(order.assignedDriver).toBe(7);
+    });
   });
 });

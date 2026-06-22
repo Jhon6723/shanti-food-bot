@@ -24,8 +24,9 @@ export class Order {
   deliveryFee: number;
   total: number;
   deliveredBy?: number;
+  assignedDriver?: number;
 
-  constructor(data: OrderRequestData & { id?: string; status?: OrderStatus; createdAt?: string; estimatedReadyAt?: string }) {
+  constructor(data: OrderRequestData & { id?: string; status?: OrderStatus; createdAt?: string; estimatedReadyAt?: string; assignedDriver?: number }) {
     this.id = data.id ?? generateOrderId();
     this.customer = new Customer(data.customer);
     this.items = data.items.map((item) => new OrderItem(item));
@@ -36,6 +37,7 @@ export class Order {
     this.notes = data.notes ?? '';
     this.createdAt = data.createdAt ?? new Date().toISOString();
     this.estimatedReadyAt = data.estimatedReadyAt ?? this.calculateEstimatedTime();
+    this.assignedDriver = data.assignedDriver;
 
     this.subtotal = this.calculateSubtotal();
     this.deliveryFee = this.type === 'delivery' ? 3000 : 0;
@@ -86,6 +88,14 @@ export class Order {
     return this;
   }
 
+  assignDriver(driverId: number): this {
+    if (['delivered', 'cancelled'].includes(this.status)) {
+      throw new Error('Cannot assign driver to a delivered or cancelled order');
+    }
+    this.assignedDriver = driverId;
+    return this;
+  }
+
   cancel(): this {
     const finalStatuses: OrderStatus[] = ['delivered', 'cancelled'];
     if (finalStatuses.includes(this.status)) {
@@ -110,6 +120,7 @@ export class Order {
     createdAt: string;
     estimatedReadyAt: string;
     deliveredBy?: number;
+    assignedDriver?: number;
   } {
     return {
       id: this.id,
@@ -126,6 +137,7 @@ export class Order {
       createdAt: this.createdAt,
       estimatedReadyAt: this.estimatedReadyAt,
       deliveredBy: this.deliveredBy,
+      assignedDriver: this.assignedDriver,
     };
   }
 }
