@@ -106,4 +106,35 @@ describe('POST /api/v1/auth/login', () => {
     expect(res.status).toBe(200);
     expect(res.body.role).toBe('delivery');
   });
+
+  // P8: Delivery dashboard optional — block delivery login when disabled
+  it('returns 403 when delivery dashboard is disabled and user is delivery (P8)', async () => {
+    const prev = process.env.DELIVERY_DASHBOARD_ENABLED;
+    process.env.DELIVERY_DASHBOARD_ENABLED = 'false';
+    const hash = await bcrypt.hash('driver123', 10);
+    mockPool.query.mockResolvedValueOnce({
+      rows: [{ id: 2, username: 'carlos_r', password_hash: hash, role: 'delivery', active: true, name: 'Carlos' }],
+    });
+    const res = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ username: 'carlos_r', password: 'driver123' });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain('deshabilitado');
+    process.env.DELIVERY_DASHBOARD_ENABLED = prev;
+  });
+
+  it('allows admin login when delivery dashboard is disabled (P8)', async () => {
+    const prev = process.env.DELIVERY_DASHBOARD_ENABLED;
+    process.env.DELIVERY_DASHBOARD_ENABLED = 'false';
+    const hash = await bcrypt.hash('admin123', 10);
+    mockPool.query.mockResolvedValueOnce({
+      rows: [{ id: 1, username: 'admin', password_hash: hash, role: 'admin', active: true, name: 'Admin' }],
+    });
+    const res = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ username: 'admin', password: 'admin123' });
+    expect(res.status).toBe(200);
+    expect(res.body.role).toBe('admin');
+    process.env.DELIVERY_DASHBOARD_ENABLED = prev;
+  });
 });

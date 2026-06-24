@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 import { Router, type Request, type Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { pool } from '../../infrastructure/database/connection.js';
+import { isDeliveryDashboardEnabled } from './config.js';
 
 const router = Router();
 
@@ -47,6 +48,12 @@ router.post('/login', async (req: Request, res: Response) => {
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
       res.status(401).json({ error: 'Credenciales inválidas' });
+      return;
+    }
+
+    // P8: Block delivery login when dashboard is disabled
+    if (user.role === 'delivery' && !isDeliveryDashboardEnabled()) {
+      res.status(403).json({ error: 'Dashboard de entregas deshabilitado. Contacta al administrador.' });
       return;
     }
 
