@@ -10,6 +10,7 @@ import { join } from 'path';
 import { initDatabase, pool } from './infrastructure/database/connection.js';
 
 import authRouter from './api/routes/auth.js';
+import configRouter from './api/routes/config.js';
 import categoriesRouter from './api/routes/categories.js';
 import eventsRouter from './api/routes/events.js';
 import ordersRouter from './api/routes/orders.js';
@@ -80,6 +81,7 @@ app.get('/health', async (_req: Request, res: Response) => {
 // API Routes per OpenAPI spec
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/categories', categoriesRouter);
+app.use('/api/v1/config', configRouter);
 app.use('/api/v1/events', eventsRouter);
 app.use('/api/v1/orders', ordersRouter);
 app.use('/api/v1/products', productsRouter);

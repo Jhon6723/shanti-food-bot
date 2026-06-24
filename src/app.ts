@@ -3,6 +3,7 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { join } from 'path';
 import authRouter from './api/routes/auth.js';
+import configRouter from './api/routes/config.js';
 import eventsRouter from './api/routes/events.js';
 import ordersRouter from './api/routes/orders.js';
 import productsRouter from './api/routes/products.js';
@@ -26,6 +27,7 @@ export function createApp() {
   });
 
   app.use('/api/v1/auth', authRouter);
+  app.use('/api/v1/config', configRouter);
   app.use('/api/v1/events', eventsRouter);
   app.use('/api/v1/orders', ordersRouter);
   app.use('/api/v1/products', productsRouter);

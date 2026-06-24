@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Shanti Food API
-  version: 1.5.0
+  version: 1.6.0
   description: API para gestión de pedidos de arrocería vía WhatsApp
 
 servers:
@@ -42,6 +42,25 @@ paths:
                     enum: [admin, delivery]
         '401':
           description: Credenciales inválidas
+        '403':
+          description: Dashboard de entregas deshabilitado (rol delivery con DELIVERY_DASHBOARD_ENABLED=false)
+
+  /config/public:
+    get:
+      summary: Feature flags públicas (no requiere auth)
+      tags: [Config]
+      security: []
+      responses:
+        '200':
+          description: Configuración pública
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deliveryDashboardEnabled:
+                    type: boolean
+                    description: "Si el dashboard de repartidores está habilitado (default: true)"
 
   /events:
     get:
