@@ -10,6 +10,7 @@ interface CreatePayload {
   name: string;
   username: string;
   password: string;
+  phone: string;
   active: boolean;
 }
 
@@ -30,7 +31,7 @@ export function DriversPage({ onToast }: Props) {
       if (editingDriver) {
         await updateDriver.mutateAsync({
           id: editingDriver.id,
-          data: { name: data.name, username: data.username, ...(data.password ? { password: data.password } : {}), active: data.active },
+          data: { name: data.name, username: data.username, ...(data.password ? { password: data.password } : {}), phone: data.phone || undefined, active: data.active },
         });
         onToast('Repartidor actualizado', 'success');
       } else {
@@ -166,6 +167,7 @@ function DriverFormModal({
   const [name, setName] = useState(driver?.name ?? '');
   const [username, setUsername] = useState(driver?.username ?? '');
   const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState(driver?.phone ?? '');
   const [active, setActive] = useState(driver?.active ?? true);
   const isEdit = !!driver;
   const isValid = name.trim().length > 0 && username.trim().length > 0 && (isEdit || password.trim().length > 0);
@@ -173,7 +175,7 @@ function DriverFormModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValid) return;
-    onSave({ name, username, password, active });
+    onSave({ name, username, password, phone, active });
   };
 
   return (
@@ -197,6 +199,10 @@ function DriverFormModal({
           <div>
             <label className="text-slate-600 text-sm block mb-1.5">Usuario</label>
             <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Ej: carlos_r" className="w-full px-4 py-3 bg-slate-50 rounded-xl text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:bg-white transition-all" />
+          </div>
+          <div>
+            <label className="text-slate-600 text-sm block mb-1.5">Teléfono <span className="text-slate-400">· para contacto por WhatsApp</span></label>
+            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Ej: 573001234567" className="w-full px-4 py-3 bg-slate-50 rounded-xl text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-emerald-500/30 focus:bg-white transition-all" />
           </div>
           <div>
             <label className="text-slate-600 text-sm block mb-1.5">

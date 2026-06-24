@@ -7,6 +7,7 @@ interface CreateUserPayload {
   username: string;
   password: string;
   role: 'delivery';
+  phone?: string;
   active?: boolean;
 }
 
@@ -14,6 +15,7 @@ interface UpdateUserPayload {
   name?: string;
   username?: string;
   password?: string;
+  phone?: string;
   active?: boolean;
 }
 
