@@ -2,6 +2,7 @@ import { LogOut, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { OrderDetailModal } from '../components/OrderDetailModal';
 import { SkeletonCard } from '../components/SkeletonLoader';
+import { useConfig } from '../hooks/useConfig';
 import { useOrdersWithSound, useUpdateOrder } from '../hooks/useOrders';
 import {
     formatCOP,
@@ -32,10 +33,12 @@ interface Props {
 export function OrdersPage({ onToast, onLogout }: Props) {
   const { data: orders = [], isLoading, refetch } = useOrdersWithSound();
   const updateOrder = useUpdateOrder();
+  const { data: config } = useConfig();
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   const pendingCount = orders.filter((o) => o.status === 'pending').length;
+  const deliveryEnabled = config?.deliveryDashboardEnabled ?? true;
 
   const filteredOrders = activeFilter === 'all'
     ? orders
@@ -101,6 +104,14 @@ export function OrdersPage({ onToast, onLogout }: Props) {
       </div>
 
       <div className="max-w-[480px] mx-auto px-4 py-4 space-y-3 pb-24">
+        {!deliveryEnabled && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-2">
+            <span className="text-amber-500 text-sm">⚠️</span>
+            <span className="text-amber-700 text-xs">
+              Dashboard de repartidores deshabilitado. Las entregas se coordinan manualmente por WhatsApp.
+            </span>
+          </div>
+        )}
         {isLoading ? (
           Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
         ) : filteredOrders.length === 0 ? (
