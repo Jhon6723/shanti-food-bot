@@ -12,6 +12,7 @@ interface UserRow {
   name: string;
   username: string;
   role: 'admin' | 'delivery';
+  phone: string | null;
   active: boolean;
   created_at: string;
 }
@@ -22,11 +23,11 @@ router.get('/', requireJWT, requireRole('admin'), async (req: Request, res: Resp
   try {
     const result = role
       ? await pool.query<UserRow>(
-          'SELECT id, name, username, role, active, created_at FROM users WHERE role = $1 ORDER BY created_at DESC',
+          'SELECT id, name, username, role, phone, active, created_at FROM users WHERE role = $1 ORDER BY created_at DESC',
           [role]
         )
       : await pool.query<UserRow>(
-          'SELECT id, name, username, role, active, created_at FROM users ORDER BY created_at DESC'
+          'SELECT id, name, username, role, phone, active, created_at FROM users ORDER BY created_at DESC'
         );
     res.json(result.rows);
   } catch (error) {
@@ -37,7 +38,7 @@ router.get('/', requireJWT, requireRole('admin'), async (req: Request, res: Resp
 
 // POST /users — create user (admin only)
 router.post('/', requireJWT, requireRole('admin'), async (req: Request, res: Response) => {
-  const { name, username, password, role } = req.body ?? {};
+  const { name, username, password, role, phone } = req.body ?? {};
 
   if (!name || !username || !password || !role) {
     res.status(400).json({ error: 'name, username, password y role son requeridos' });
@@ -51,8 +52,8 @@ router.post('/', requireJWT, requireRole('admin'), async (req: Request, res: Res
   try {
     const hash = await bcrypt.hash(password, 12);
     const result = await pool.query<UserRow>(
-      'INSERT INTO users (name, username, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, name, username, role, active, created_at',
-      [name, username, hash, role]
+      'INSERT INTO users (name, username, password_hash, role, phone) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, username, role, phone, active, created_at',
+      [name, username, hash, role, phone ?? null]
     );
     res.status(201).json(result.rows[0]);
   } catch (error: unknown) {
@@ -68,24 +69,24 @@ router.post('/', requireJWT, requireRole('admin'), async (req: Request, res: Res
 // PATCH /users/:id — update user (admin only)
 router.patch('/:id', requireJWT, requireRole('admin'), async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, username, password, active } = req.body ?? {};
+  const { name, username, password, active, phone } = req.body ?? {};
 
   try {
     if (password) {
       const hash = await bcrypt.hash(password, 12);
       await pool.query(
-        'UPDATE users SET name = COALESCE($1, name), username = COALESCE($2, username), password_hash = $3, active = COALESCE($4, active) WHERE id = $5',
-        [name, username, hash, active, id]
+        'UPDATE users SET name = COALESCE($1, name), username = COALESCE($2, username), password_hash = $3, phone = COALESCE($4, phone), active = COALESCE($5, active) WHERE id = $6',
+        [name, username, hash, phone, active, id]
       );
     } else {
       await pool.query(
-        'UPDATE users SET name = COALESCE($1, name), username = COALESCE($2, username), active = COALESCE($3, active) WHERE id = $4',
-        [name, username, active, id]
+        'UPDATE users SET name = COALESCE($1, name), username = COALESCE($2, username), phone = COALESCE($3, phone), active = COALESCE($4, active) WHERE id = $5',
+        [name, username, phone, active, id]
       );
     }
 
     const result = await pool.query<UserRow>(
-      'SELECT id, name, username, role, active, created_at FROM users WHERE id = $1',
+      'SELECT id, name, username, role, phone, active, created_at FROM users WHERE id = $1',
       [id]
     );
     if (!result.rows[0]) {

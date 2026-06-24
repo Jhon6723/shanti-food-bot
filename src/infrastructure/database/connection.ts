@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS users (
     username      VARCHAR(50) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     role          VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'delivery')),
+    phone         VARCHAR(20),
     active        BOOLEAN NOT NULL DEFAULT true,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -107,6 +108,11 @@ CREATE INDEX IF NOT EXISTS idx_orders_delivered_by ON orders(delivered_by);
 const MIGRATION_ASSIGNED_DRIVER_SQL = `
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS assigned_driver INTEGER REFERENCES users(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_orders_assigned_driver ON orders(assigned_driver);
+`;
+
+// Migration step 2c: add phone column to users (P8 — driver phone for WhatsApp contact)
+const MIGRATION_USERS_PHONE_SQL = `
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20);
 `;
 
 // Migration step 3: categories and products tables (v1.5)
@@ -195,6 +201,7 @@ export async function initDatabase(): Promise<void> {
   await pool.query(MIGRATION_USERS_SQL);
   await pool.query(MIGRATION_ORDERS_SQL);
   await pool.query(MIGRATION_ASSIGNED_DRIVER_SQL);
+  await pool.query(MIGRATION_USERS_PHONE_SQL);
   await pool.query(MIGRATION_CATEGORIES_SQL);
   await pool.query(MIGRATION_PRODUCTS_SQL);
   await seedAdminUser();
