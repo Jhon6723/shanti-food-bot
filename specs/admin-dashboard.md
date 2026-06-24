@@ -509,6 +509,7 @@ En Android (Chrome):
 | Acción | Rol | Endpoint | Auth |
 |--------|-----|----------|------|
 | Login | ambos | `POST /api/v1/auth/login` | ❌ |
+| Feature flags públicas | público | `GET /api/v1/config/public` | ❌ |
 | Ver todos los pedidos | admin | `GET /api/v1/orders?status=...` | ✅ JWT |
 | Ver pedidos `ready` (domicilio) | delivery | `GET /api/v1/orders` — solo los asignados a él (`assignedDriver = userId`) | ✅ JWT |
 | Ver detalle | ambos | `GET /api/v1/orders/:id` | ✅ JWT |
@@ -967,7 +968,7 @@ El prototipo generado en Figma Make es la **base visual y estructural** del fron
 | `components/DriverStatsScreen.tsx` | `pages/DriverStatsPage.tsx` | Conectar a `GET /api/v1/users/:id/stats` |
 | `components/MenuScreen.tsx` | `pages/MenuPage.tsx` | Conectar a `GET/POST/PATCH /api/v1/products` |
 | `components/ProductFormModal.tsx` | `components/ProductFormModal.tsx` | Conectar a `POST /api/v1/products` y `PATCH /api/v1/products/:id` |
-| `components/DeliveryScreen.tsx` | `pages/DeliveryPage.tsx` | Usar `useQuery` con `refetchInterval: 5000`, conectar "Marcar entregado" a `PATCH /api/v1/orders/:id` |
+| `components/DeliveryScreen.tsx` | `pages/DeliveryPage.tsx` | Usar `useQuery` con `refetchInterval: 5000`, conectar "Marcar entregado" a `PATCH /api/v1/orders/:id`. Cuando `DELIVERY_DASHBOARD_ENABLED=false`, mostrar pantalla "Dashboard deshabilitado" en lugar de la lista de pedidos |
 | `components/BottomNav.tsx` | `components/BottomNav.tsx` | Sin cambios — reutilizar directo |
 | `components/Toast.tsx` | `components/Toast.tsx` | Sin cambios — reutilizar directo |
 | `components/OfflineBanner.tsx` | `components/OfflineBanner.tsx` | Conectar a evento real `window.addEventListener('offline/online')` |

@@ -1,6 +1,6 @@
 # Known Issues and Roadmap
 
-## Status: v1.5 — Manual driver assignment
+## Status: v1.6 — Optional delivery dashboard
 
 ---
 
@@ -45,6 +45,7 @@
 | # | Problem | Fix |
 |---|---------|-----|
 | P7 | No manual driver assignment — all delivery drivers see all ready orders | Add `assignedDriver` field to Order model + `assignDriver()` method. New `PATCH /orders/:id/assign` endpoint (admin only). Delivery API filters by `assignedDriver = userId`. Driver assignment UI in `OrderDetailModal`. DB migration adds `assigned_driver` column. |
+| P8 | Delivery dashboard not optional for small businesses | Add `DELIVERY_DASHBOARD_ENABLED` env var (default: true). New `GET /config/public` endpoint exposes feature flags. Delivery login blocked with 403 when disabled. Admin sees WhatsApp contact option instead of driver assignment UI. |
 
 ---
 
@@ -223,6 +224,7 @@ Persist the original `chatId` from the webhook and use it for all WhatsApp commu
 **Solution**: Add `assignedDriver` field to Order. Admin assigns orders to drivers via dashboard. Delivery API filters by `assignedDriver = userId`.
 
 ### P8. Delivery dashboard not optional for small businesses
+**Status**: ✅ Fixed in v1.6
 **Problem**: The delivery dashboard is always enabled. For small businesses with one driver or direct contact, it adds unnecessary complexity.
 **Impact**: Small business owners must manage delivery through the dashboard even when a simple WhatsApp contact would suffice.
 **Solution**: Add `DELIVERY_DASHBOARD_ENABLED` env var. When disabled, admin manages delivery directly and contacts driver via WhatsApp.
@@ -238,5 +240,5 @@ Persist the original `chatId` from the webhook and use it for all WhatsApp commu
 | v1.3 | Paginated status | #14 ✅ |
 | v1.4 | **Admin dashboard + UX fixes** | #15, #16 ✅ — dynamic delivery time, customer name fix |
 | v1.5 | **Driver management** | P7 ✅ — manual driver assignment |
+| v1.6 | **Optional delivery dashboard** | P8 ✅ — `DELIVERY_DASHBOARD_ENABLED` env var, WhatsApp contact fallback |
 | v2.0 | Production | P2, P3, P4 — Meta templates, persistent sessions, business hours |
-| v2.1 | Optional delivery dashboard | P8 — optional delivery dashboard for small businesses |

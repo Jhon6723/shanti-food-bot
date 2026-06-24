@@ -80,6 +80,23 @@ See `specs/admin-dashboard.md §11` for detailed structure and Coolify configura
 - Build command: `npm run build` (compiles `admin/` + TypeScript backend)
 - Start command: `npm start`
 
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATABASE_URL` | yes | — | PostgreSQL connection string |
+| `JWT_SECRET` | yes | — | Secret for signing JWT tokens |
+| `ADMIN_USER` | no | `admin` | Initial admin username (seeded on first run) |
+| `ADMIN_PASSWORD` | no | — | Initial admin password (seeded on first run) |
+| `WHATSAPP_PROVIDER` | no | `meta` | WhatsApp provider (`meta` or `openwa`) |
+| `WHATSAPP_VERIFY_TOKEN` | yes | — | Meta webhook verification token |
+| `WHATSAPP_APP_SECRET` | no | — | Meta app secret for HMAC verification |
+| `WHATSAPP_PHONE_NUMBER_ID` | yes | — | Meta phone number ID |
+| `WHATSAPP_ACCESS_TOKEN` | yes | — | Meta access token |
+| `WHATSAPP_API_VERSION` | no | `v18.0` | Meta Graph API version |
+| `BUSINESS_ADDRESS` | no | — | Restaurant address shown in bot |
+| `DELIVERY_DASHBOARD_ENABLED` | no | `true` | Enable/disable delivery dashboard (P8). When `false`, delivery login is blocked and admin coordinates deliveries via WhatsApp |
+
 ## Incoming Message Flow
 
 1. User sends message to the connected WhatsApp number
