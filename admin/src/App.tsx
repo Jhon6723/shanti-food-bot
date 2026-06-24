@@ -4,6 +4,7 @@ import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { BottomNav } from './components/BottomNav';
 import { Toast } from './components/Toast';
 import { useAuth } from './hooks/useAuth';
+import { useConfig } from './hooks/useConfig';
 import { useOrders } from './hooks/useOrders';
 import type { AdminScreen, ToastState } from './lib/types';
 import { DeliveryPage } from './pages/DeliveryPage';
@@ -21,6 +22,7 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 
 function AdminShell() {
   const { user, logout } = useAuth();
+  const { data: config } = useConfig();
   const navigate = useNavigate();
   const { data: orders = [] } = useOrders();
   const [screen, setScreen] = useState<AdminScreen>('orders');
@@ -37,8 +39,28 @@ function AdminShell() {
   };
 
   const pendingCount = orders.filter((o) => o.status === 'pending').length;
+  const deliveryEnabled = config?.deliveryDashboardEnabled ?? true;
 
   if (user!.role === 'delivery') {
+    if (!deliveryEnabled) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center px-6">
+          <div className="text-center max-w-sm">
+            <span className="text-6xl mb-4 select-none block">🛵</span>
+            <h1 className="text-slate-900 text-xl font-semibold mb-2">Dashboard deshabilitado</h1>
+            <p className="text-slate-500 text-sm mb-6">
+              El panel de entregas no está disponible. Contacta al administrador para gestionar tus pedidos.
+            </p>
+            <button
+              onClick={handleLogout}
+              className="px-6 py-3 bg-slate-100 text-slate-700 rounded-xl text-sm hover:bg-slate-200 transition-colors"
+            >
+              Cerrar sesión
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <>
         <DeliveryPage driverName={user!.name} onLogout={handleLogout} onToast={showToast} />
