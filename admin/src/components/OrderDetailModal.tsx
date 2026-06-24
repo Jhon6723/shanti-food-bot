@@ -1,13 +1,14 @@
 import { Clock, MapPin, MessageSquare, Phone, UserCircle, X } from 'lucide-react';
 import { useState } from 'react';
+import { useConfig } from '../hooks/useConfig';
 import { useAssignDriver, useDeliveryDrivers, useUpdateOrder } from '../hooks/useOrders';
 import {
-    Order,
-    STATUS_COLORS,
-    STATUS_LABELS,
-    formatCOP,
-    formatTime,
-    getNextAction,
+  Order,
+  STATUS_COLORS,
+  STATUS_LABELS,
+  formatCOP,
+  formatTime,
+  getNextAction,
 } from '../lib/types';
 
 interface Props {
@@ -20,12 +21,17 @@ export function OrderDetailModal({ order, onClose, onToast }: Props) {
   const updateOrder = useUpdateOrder();
   const assignDriver = useAssignDriver();
   const { data: drivers = [] } = useDeliveryDrivers();
+  const { data: config } = useConfig();
   const [selectedDriver, setSelectedDriver] = useState<number | null>(
     order.assignedDriver ?? null
   );
   const nextAction = getNextAction(order.status);
   const canAct = !['delivered', 'cancelled'].includes(order.status);
-  const canAssign = order.type === 'delivery' && canAct;
+  const deliveryEnabled = config?.deliveryDashboardEnabled ?? true;
+  const canAssign = order.type === 'delivery' && canAct && deliveryEnabled;
+  const canContactDriver = order.type === 'delivery' && canAct && !deliveryEnabled;
+  const assignedDriverData = drivers.find((d) => d.id === order.assignedDriver);
+  const driverPhone = assignedDriverData?.phone;
 
   const handleConfirm = async () => {
     if (!nextAction) return;
@@ -200,6 +206,37 @@ export function OrderDetailModal({ order, onClose, onToast }: Props) {
                 {order.assignedDriver && selectedDriver === (order.assignedDriver ?? null) && (
                   <p className="text-slate-400 text-xs">
                     Repartidor actual: <span className="text-slate-600 font-medium">{drivers.find((d) => d.id === order.assignedDriver)?.name ?? `#${order.assignedDriver}`}</span>
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+
+          {canContactDriver && (
+            <>
+              <div className="h-px bg-slate-100" />
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-slate-400 text-xs uppercase tracking-wide">
+                  <UserCircle size={14} />
+                  <span>Entrega manual</span>
+                </div>
+                <p className="text-slate-400 text-xs">
+                  El dashboard de repartidores está deshabilitado. Coordina la entrega directamente por WhatsApp.
+                </p>
+                {driverPhone ? (
+                  <a
+                    href={`https://wa.me/${driverPhone.replace(/\D/g, '')}?text=${encodeURIComponent(
+                      `Hola ${assignedDriverData?.name ?? ''}, tienes un pedido de Arrocería Shanti (#${order.id}) para entregar. ¿Cuándo puedes hacerlo?`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-3 bg-green-500 text-white rounded-xl text-sm hover:bg-green-600 active:scale-[0.98] transition-all text-center block"
+                  >
+                    Contactar repartidor por WhatsApp
+                  </a>
+                ) : (
+                  <p className="text-amber-600 text-xs bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                    No hay repartidor asignado o no tiene teléfono registrado. Asigna un repartidor con teléfono en la sección de Repartidores.
                   </p>
                 )}
               </div>
