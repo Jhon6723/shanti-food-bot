@@ -9,6 +9,7 @@ import { getProductById } from '../../domain/models/Product.js';
 import { sendWhatsAppMessage } from '../../infrastructure/whatsapp/WhatsAppSender.js';
 import type { OrderRequestData, OrderStatus } from '../../types/index.js';
 import { requireJWT, requireRole } from '../middleware/auth.js';
+import { handleError } from '../middleware/errorHandler.js';
 
 function formatCurrency(value: number): string {
   return '$' + value.toLocaleString('es-CO');
@@ -108,7 +109,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     res.status(201).json(order.toJSON());
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    handleError(res, 500, error, 'Internal server error');
   }
 });
 
@@ -129,7 +130,7 @@ router.get('/', requireJWT, async (req: Request, res: Response) => {
     const orders = await orderService.getOrders(filters);
     res.json(orders.map((o) => o.toJSON()));
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    handleError(res, 500, error, 'Internal server error');
   }
 });
 
@@ -138,7 +139,7 @@ router.get('/stats/dashboard', requireJWT, requireRole('admin'), async (_req: Re
   try {
     res.json(await orderService.getDashboardStats());
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    handleError(res, 500, error, 'Internal server error');
   }
 });
 
@@ -149,7 +150,7 @@ router.get('/:id', requireJWT, async (req: Request, res: Response) => {
     if (!order) return res.status(404).json({ error: 'Order not found' });
     res.json(order.toJSON());
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    handleError(res, 500, error, 'Internal server error');
   }
 });
 
@@ -210,7 +211,7 @@ router.patch('/:id', requireJWT, async (req: Request, res: Response) => {
 
     res.json(order.toJSON());
   } catch (error) {
-    res.status(400).json({ error: (error as Error).message });
+    handleError(res, 400, error, 'Failed to update order');
   }
 });
 
@@ -233,7 +234,7 @@ router.patch('/:id/assign', requireJWT, requireRole('admin'), async (req: Reques
 
     res.json(order.toJSON());
   } catch (error) {
-    res.status(400).json({ error: (error as Error).message });
+    handleError(res, 400, error, 'Failed to assign driver');
   }
 });
 
@@ -258,7 +259,7 @@ router.get('/reports/sales', requireJWT, requireRole('admin'), async (req: Reque
 
     res.json(report);
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    handleError(res, 500, error, 'Failed to generate sales report');
   }
 });
 
@@ -375,7 +376,7 @@ router.post('/reports/export', requireJWT, requireRole('admin'), async (req: Req
 
     res.status(400).json({ error: "format must be 'csv' or 'pdf'" });
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    handleError(res, 500, error, 'Failed to export report');
   }
 });
 

@@ -7,6 +7,12 @@ import { sseService } from '../application/SSEService.js';
 import { Order } from '../domain/models/Order.js';
 import type { OrderItemData, OrderType, PaymentMethod } from '../types/index.js';
 
+// Input length limits (issue #6 — SECURITY.md)
+const MAX_MESSAGE_LENGTH = 1000;
+const MAX_NAME_LENGTH = 100;
+const MAX_ADDRESS_LENGTH = 300;
+const MAX_NOTES_LENGTH = 300;
+
 type BotStep =
   | null
   | 'menu'
@@ -100,7 +106,7 @@ export class WhatsAppBot {
     if (chatId) {
       session.chatId = chatId;
     }
-    const rawText = message.text?.body.trim() ?? '';
+    const rawText = (message.text?.body.trim() ?? '').slice(0, MAX_MESSAGE_LENGTH);
     const text = rawText.toLowerCase();
 
     if (text === 'hola' || text === 'inicio' || text === 'empezar') {
@@ -211,7 +217,7 @@ Responde con el número de la opción.`;
   }
 
   private async handleName(text: string, session: Session): Promise<string> {
-    const name = text.trim();
+    const name = text.trim().slice(0, MAX_NAME_LENGTH);
     if (name.length < 2) {
       return `Por favor escribe tu nombre real (al menos 2 letras).\n\n¿Cual es tu nombre?`;
     }
@@ -485,7 +491,7 @@ Responde con el número de la opción.`;
       return `📍 Por favor escribe una dirección válida con barrio o sector.\n\nEjemplos:\n• "Carrera 45 #12-34, Barrio Centro"\n• "Manzana 5 Casa 12, Urb. Los Almendros"\n• "Km 4 vía al Norte"\n• "Conjunto Los Pinos, Torre 2 Apto 301"`;
     }
 
-    session.address = text;
+    session.address = text.slice(0, MAX_ADDRESS_LENGTH);
     session.step = 'delivery_notes';
     return `📍 Dirección guardada: *${text}*\n\n¿Tienes alguna nota de entrega? (piso, color de casa, referencia, etc.)\n\nEscribe tu nota o *"no"* para continuar.`;
   }
@@ -498,7 +504,7 @@ Responde con el número de la opción.`;
 
     const skipWords = ['no', 'ninguna', 'nada', 'omitir', 'skip', 'continuar'];
     if (!skipWords.includes(text.toLowerCase().trim())) {
-      session.deliveryNotes = text;
+      session.deliveryNotes = text.slice(0, MAX_NOTES_LENGTH);
     }
     session.step = 'payment';
     return `📝 Nota guardada.\n\n¿Método de pago?\n\n1️⃣ 💵 Efectivo (contra entrega)\n2️⃣ 📱 Nequi (transferencia)\n\n_(Escribe *0* o *volver* para regresar)_`;

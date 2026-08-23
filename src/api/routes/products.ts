@@ -5,6 +5,7 @@ import { Router, type Request, type Response } from 'express';
 import { categoryRepository } from '../../infrastructure/repositories/CategoryRepository.js';
 import { productRepository } from '../../infrastructure/repositories/ProductRepository.js';
 import { requireJWT, requireRole } from '../middleware/auth.js';
+import { handleError } from '../middleware/errorHandler.js';
 
 const router = Router();
 
@@ -22,7 +23,7 @@ router.get('/', async (req: Request, res: Response) => {
     }
     res.json(rows);
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    handleError(res, 500, error, 'Internal server error');
   }
 });
 
@@ -33,7 +34,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     if (!product) return res.status(404).json({ error: 'Product not found' });
     res.json(product);
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    handleError(res, 500, error, 'Internal server error');
   }
 });
 
@@ -50,7 +51,7 @@ router.get('/menu/whatsapp', async (_req: Request, res: Response) => {
     }
     res.json(menu);
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
+    handleError(res, 500, error, 'Internal server error');
   }
 });
 
@@ -76,7 +77,7 @@ router.post('/', requireJWT, requireRole('admin'), async (req: Request, res: Res
     if ((error as Error).message.includes('duplicate') || (error as Error).message.includes('unique')) {
       return res.status(409).json({ error: 'Product ID already exists' });
     }
-    res.status(400).json({ error: (error as Error).message });
+    handleError(res, 400, error, 'Failed to create product');
   }
 });
 
@@ -96,7 +97,7 @@ router.patch('/:id', requireJWT, requireRole('admin'), async (req: Request, res:
     if (!product) return res.status(404).json({ error: 'Product not found' });
     res.json(product);
   } catch (error) {
-    res.status(400).json({ error: (error as Error).message });
+    handleError(res, 400, error, 'Failed to update product');
   }
 });
 
@@ -108,7 +109,7 @@ router.delete('/:id', requireJWT, requireRole('admin'), async (req: Request, res
     await productRepository.delete(req.params.id);
     res.status(204).send();
   } catch (error) {
-    res.status(400).json({ error: (error as Error).message });
+    handleError(res, 400, error, 'Failed to delete product');
   }
 });
 

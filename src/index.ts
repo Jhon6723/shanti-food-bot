@@ -4,22 +4,9 @@
 import './config/env.js';
 
 import cors from 'cors';
-import express, { type NextFunction, type Request, type Response } from 'express';
 import { createServer } from 'http';
-import { join } from 'path';
+import { createApp } from './app.js';
 import { initDatabase, pool } from './infrastructure/database/connection.js';
-
-import authRouter from './api/routes/auth.js';
-import configRouter from './api/routes/config.js';
-import categoriesRouter from './api/routes/categories.js';
-import eventsRouter from './api/routes/events.js';
-import ordersRouter from './api/routes/orders.js';
-import productsRouter from './api/routes/products.js';
-import usersRouter from './api/routes/users.js';
-import webhookRouter from './api/routes/webhook.js';
-
-const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // CORS — allow admin SPA origin in production and localhost for dev
 const allowedOrigins = [
@@ -27,45 +14,41 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
 ];
-app.use(cors({
-  origin: (origin, cb) => {
-    // allow requests with no origin (curl, Postman, webhook)
-    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-    cb(new Error(`CORS: origin ${origin} not allowed`));
-  },
-  credentials: true,
-}));
-
-// Middleware
-app.use(express.json({
-  verify: (req, _res, buf: Buffer) => {
-    (req as Request & { rawBody?: string }).rawBody = buf.toString();
-  }
-}));
-app.use(express.urlencoded({ extended: true }));
 
 // Request / Response logging
-app.use((req: Request, res: Response, next: NextFunction) => {
-  const start = Date.now();
-  const reqId = `${req.method} ${req.path}`;
-  console.log(`${new Date().toISOString()} - → ${reqId}`);
+function loggingMiddleware(app: import('express').Express) {
+  app.use(cors({
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+      cb(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    credentials: true,
+  }));
 
-  res.on('finish', () => {
-    const duration = Date.now() - start;
-    const status = res.statusCode;
-    const level = status >= 500 ? 'ERROR' : status >= 400 ? 'WARN' : 'OK';
-    console.log(`${new Date().toISOString()} - ← ${reqId} ${status} (${duration}ms) [${level}]`);
+  app.use((req, res, next) => {
+    const start = Date.now();
+    const reqId = `${req.method} ${req.path}`;
+    console.log(`${new Date().toISOString()} - → ${reqId}`);
+
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      const status = res.statusCode;
+      const level = status >= 500 ? 'ERROR' : status >= 400 ? 'WARN' : 'OK';
+      console.log(`${new Date().toISOString()} - ← ${reqId} ${status} (${duration}ms) [${level}]`);
+    });
+
+    next();
   });
+}
 
-  next();
-});
+const app = createApp(loggingMiddleware);
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-// Health check — includes DB readiness for monitoring
+// Health check — includes DB readiness for monitoring (overrides the simple one in app.ts)
 let dbReady = false;
 let isShuttingDown = false;
-app.get('/health', async (_req: Request, res: Response) => {
+app.get('/health', async (_req, res) => {
   if (isShuttingDown) {
-    // Return 503 during graceful shutdown so Traefik removes this container from the pool
     return res.status(503).json({ status: 'shutting_down', ready: false, timestamp: new Date().toISOString() });
   }
   try {
@@ -78,25 +61,8 @@ app.get('/health', async (_req: Request, res: Response) => {
   }
 });
 
-// API Routes per OpenAPI spec
-app.use('/api/v1/auth', authRouter);
-app.use('/api/v1/categories', categoriesRouter);
-app.use('/api/v1/config', configRouter);
-app.use('/api/v1/events', eventsRouter);
-app.use('/api/v1/orders', ordersRouter);
-app.use('/api/v1/products', productsRouter);
-app.use('/api/v1/users', usersRouter);
-app.use('/api/v1/webhooks', webhookRouter);
-
-// Serve admin SPA static build
-const adminDist = join(process.cwd(), 'admin', 'dist');
-app.use('/admin', express.static(adminDist));
-app.get('/admin/*', (_req: Request, res: Response) => {
-  res.sendFile(join(adminDist, 'index.html'));
-});
-
-// Root redirect to API
-app.get('/', (_req: Request, res: Response) => {
+// Root endpoint with detailed info (overrides the simple one in app.ts)
+app.get('/', (_req, res) => {
   res.json({
     name: 'Shanti Food API',
     version: '1.0.0',
@@ -114,17 +80,6 @@ app.get('/', (_req: Request, res: Response) => {
     },
     specs: 'See specs/openapi.yaml for full API specification',
   });
-});
-
-// Error handling
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Internal server error' });
-});
-
-// 404 handler
-app.use((_req: Request, res: Response) => {
-  res.status(404).json({ error: 'Endpoint not found' });
 });
 
 async function startServer() {

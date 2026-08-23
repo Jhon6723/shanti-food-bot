@@ -213,9 +213,9 @@ const text = message.text?.body.slice(0, MAX_INPUT).toLowerCase().trim() ?? '';
 
 | Priority | Issue | Phase | Status |
 |-----------|-------|------|--------|
-| 🔴 1 | Disable `/webhooks/test` in production | Now | Pending |
-| 🔴 2 | JWT (`users` table + bcrypt) on `/api/v1/orders` and `/api/v1/users` routes | Admin frontend phase | Pending |
-| 🔴 3 | HMAC signature verification for Meta webhook | Now | Pending |
-| 🟡 4 | Sanitize error messages in production | Now | Pending |
-| 🟡 5 | Rate limiting by IP | Now | Pending |
-| 🟡 6 | Length limit on session inputs | Now | Pending |
+| 🔴 1 | Disable `/webhooks/test` in production | Now | ✅ Resolved — gated behind `NODE_ENV !== 'production'` in `webhook.ts` |
+| 🔴 2 | JWT (`users` table + bcrypt) on `/api/v1/orders` and `/api/v1/users` routes | Admin frontend phase | ✅ Resolved — `requireJWT` + `requireRole` middleware in `auth.ts`, bcrypt + JWT in `auth.ts` route |
+| 🔴 3 | HMAC signature verification for Meta webhook | Now | ✅ Resolved — `MetaAdapter.verifyRequest()` validates `X-Hub-Signature-256` with HMAC-SHA256 |
+| 🟡 4 | Sanitize error messages in production | Now | ✅ Resolved — `handleError()` helper returns generic messages in production, detailed in dev |
+| 🟡 5 | Rate limiting by IP | Now | ✅ Resolved — `express-rate-limit` on webhook (30/min), auth (10/15min), and general API (100/min) |
+| 🟡 6 | Length limit on session inputs | Now | ✅ Resolved — `MAX_MESSAGE_LENGTH`, `MAX_NAME_LENGTH`, `MAX_ADDRESS_LENGTH`, `MAX_NOTES_LENGTH` in `WhatsAppBot.ts` |
